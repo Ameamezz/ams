@@ -1,0 +1,710 @@
+const { app, BrowserWindow, globalShortcut, ipcMain, session, shell } = require('electron');
+const { execFile } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+
+const WEBVIEW_PARTITION = 'persist:amiyaplayer';
+const DATA_FILES = {
+  settings: 'settings.json',
+  tabs: 'tabs.json',
+  history: 'history.json',
+  favorites: 'favorites.json'
+};
+const MAX_SAVED_ITEMS = 10;
+
+const DEFAULT_TOOLBAR = [
+  { id: 'back', type: 'builtin', action: 'nav.back', label: '后退', icon: '←', visible: true, shortcut: 'Alt+Left', order: 10 },
+  { id: 'forward', type: 'builtin', action: 'nav.forward', label: '前进', icon: '→', visible: true, shortcut: 'Alt+Right', order: 20 },
+  { id: 'refresh', type: 'builtin', action: 'nav.refresh', label: '刷新', icon: '↻', visible: true, shortcut: 'F5', order: 30 },
+  { id: 'home', type: 'builtin', action: 'nav.home', label: '主页', icon: '⌂', visible: true, shortcut: '', order: 40 },
+  { id: 'sidebar', type: 'builtin', action: 'ui.toggleSidebar', label: '侧栏', icon: '☰', visible: true, shortcut: '', order: 50 },
+  { id: 'favorite', type: 'builtin', action: 'data.favoriteCurrent', label: '收藏当前页', icon: '☆', visible: true, shortcut: '', order: 60 },
+  { id: 'pin', type: 'builtin', action: 'window.toggleAlwaysOnTop', label: '置顶', icon: '⌖', visible: true, shortcut: '', order: 70 },
+  { id: 'click-through', type: 'builtin', action: 'window.toggleClickThrough', label: '鼠标穿透', icon: '⊘', visible: true, shortcut: 'F8', order: 80 },
+  { id: 'playback', type: 'builtin', action: 'ui.togglePlaybackMode', label: '播放模式', icon: '◫', visible: true, shortcut: '', order: 90 },
+  { id: 'clean', type: 'builtin', action: 'ui.toggleCleanMode', label: '纯净模式', icon: '□', visible: true, shortcut: '', order: 100 },
+  { id: 'mode', type: 'builtin', action: 'bilibili.toggleMode', label: 'B站纯净/选集', icon: '▣', visible: true, shortcut: 'F4', order: 110 },
+  { id: 'play-pause', type: 'builtin', action: 'video.togglePlay', label: '播放/暂停', icon: '▶', visible: true, shortcut: 'F9', order: 120 },
+  { id: 'rewind', type: 'builtin', action: 'video.rewind', label: '后退5秒', icon: '⏪', visible: false, shortcut: 'F10', order: 130 },
+  { id: 'forward-video', type: 'builtin', action: 'video.forward', label: '前进5秒', icon: '⏩', visible: false, shortcut: 'F11', order: 140 },
+  { id: 'opacity-down', type: 'builtin', action: 'appearance.opacityDown', label: '降低透明度', icon: '−', visible: false, shortcut: 'F6', order: 150 },
+  { id: 'opacity-up', type: 'builtin', action: 'appearance.opacityUp', label: '提高透明度', icon: '+', visible: false, shortcut: 'F7', order: 160 },
+  { id: 'settings', type: 'builtin', action: 'ui.openSettings', label: '设置', icon: '⚙', visible: true, shortcut: '', order: 170 }
+];
+
+const LEGACY_TOOLBAR_LABELS = new Set([
+  'Back',
+  'Forward',
+  'Refresh',
+  'Home',
+  'Sidebar',
+  'Favorite',
+  'Pin',
+  'Click-through',
+  'Playback',
+  'Clean',
+  'Mode',
+  'B站模式',
+  'Play',
+  'Rewind',
+  'Forward 5s',
+  'Less opaque',
+  'More opaque',
+  'Settings'
+]);
+
+const DEFAULT_SETTINGS = {
+  schemaVersion: 2,
+  opacity: 0.9,
+  themeColor: '#00a1d6',
+  sidebarWidth: 240,
+  showTopBarInPlayback: true,
+  restoreLastTabs: true,
+  openLastUrl: true,
+  homeUrl: 'https://www.bilibili.com',
+  lastUrl: '',
+  layoutMode: 'focus',
+  toolbar: DEFAULT_TOOLBAR
+};
+
+const DISABLED_CHROMIUM_FEATURES = [
+  'MediaRouter',
+  'DialMediaRouteProvider',
+  'GlobalMediaControlsCastStartStop',
+  'WebRtcHideLocalIpsWithMdns'
+];
+
+app.commandLine.appendSwitch('disable-features', DISABLED_CHROMIUM_FEATURES.join(','));
+app.commandLine.appendSwitch('disable-quic');
+app.commandLine.appendSwitch('disable-webrtc');
+app.commandLine.appendSwitch('disable-background-networking');
+app.commandLine.appendSwitch('disable-domain-reliability');
+app.commandLine.appendSwitch('force-webrtc-ip-handling-policy', 'disable_non_proxied_udp');
+app.commandLine.appendSwitch('webrtc-ip-handling-policy', 'disable_non_proxied_udp');
+
+let win;
+let isClickThrough = false;
+let isAlwaysOnTop = true;
+let settings = clone(DEFAULT_SETTINGS);
+let historyItems = [];
+let favorites = [];
+let tabs = [];
+let quitting = false;
+let nativeClickThroughTimer = null;
+
+function clone(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function clamp(value, min, max, fallback) {
+  if (typeof value !== 'number' || Number.isNaN(value)) {
+    return fallback;
+  }
+
+  return Math.max(min, Math.min(max, value));
+}
+
+function getDataPath(fileName) {
+  return path.join(app.getPath('userData'), fileName);
+}
+
+function loadJson(fileName, fallback) {
+  try {
+    const raw = fs.readFileSync(getDataPath(fileName), 'utf8');
+    const parsed = JSON.parse(raw);
+    return parsed == null ? clone(fallback) : parsed;
+  } catch (_error) {
+    return clone(fallback);
+  }
+}
+
+function saveJson(fileName, data) {
+  try {
+    const filePath = getDataPath(fileName);
+    const dir = path.dirname(filePath);
+    const tempPath = `${filePath}.tmp`;
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(tempPath, JSON.stringify(data, null, 2), 'utf8');
+    fs.renameSync(tempPath, filePath);
+  } catch (_error) {
+    // Storage must never interrupt playback.
+  }
+}
+
+function normalizeToolbar(toolbar) {
+  const incoming = Array.isArray(toolbar) ? toolbar : [];
+  const byId = new Map(incoming.filter((item) => item && item.id).map((item) => [item.id, item]));
+
+  return DEFAULT_TOOLBAR.map((defaultButton) => {
+    const override = byId.get(defaultButton.id) || {};
+    return {
+      ...defaultButton,
+      ...override,
+      id: defaultButton.id,
+      type: defaultButton.type,
+      action: defaultButton.action,
+      icon: override.icon || defaultButton.icon,
+      label: LEGACY_TOOLBAR_LABELS.has(String(override.label || ''))
+        ? defaultButton.label
+        : String(override.label || defaultButton.label).slice(0, 24),
+      visible: typeof override.visible === 'boolean' ? override.visible : defaultButton.visible,
+      deleted: override.deleted === true,
+      shortcut: override.shortcut == null ? defaultButton.shortcut : String(override.shortcut).slice(0, 32),
+      order: Number.isFinite(Number(override.order)) ? Number(override.order) : defaultButton.order
+    };
+  }).sort((a, b) => a.order - b.order);
+}
+
+function normalizeSettings(rawSettings) {
+  const loaded = rawSettings && typeof rawSettings === 'object' ? rawSettings : {};
+  return {
+    ...clone(DEFAULT_SETTINGS),
+    ...loaded,
+    opacity: clamp(Number(loaded.opacity), 0.3, 1, DEFAULT_SETTINGS.opacity),
+    sidebarWidth: clamp(Number(loaded.sidebarWidth), 220, 360, DEFAULT_SETTINGS.sidebarWidth),
+    themeColor: /^#[0-9a-fA-F]{6}$/.test(String(loaded.themeColor || '')) ? loaded.themeColor : DEFAULT_SETTINGS.themeColor,
+    layoutMode: loaded.layoutMode === 'select' ? 'select' : 'focus',
+    toolbar: normalizeToolbar(loaded.toolbar)
+  };
+}
+
+function normalizeItems(items, maxItems) {
+  if (!Array.isArray(items)) {
+    return [];
+  }
+
+  return items
+    .filter((item) => item && typeof item.url === 'string' && item.url.trim())
+    .map((item) => ({
+      id: String(item.id || createId()),
+      title: String(item.title || item.url).slice(0, 160),
+      url: item.url,
+      createdAt: item.createdAt || item.visitedAt || new Date().toISOString(),
+      updatedAt: item.updatedAt || item.visitedAt || new Date().toISOString(),
+      visitedAt: item.visitedAt || item.updatedAt || item.createdAt || new Date().toISOString()
+    }))
+    .slice(0, maxItems);
+}
+
+function loadAllData() {
+  settings = normalizeSettings(loadJson(DATA_FILES.settings, DEFAULT_SETTINGS));
+  historyItems = normalizeItems(loadJson(DATA_FILES.history, []), MAX_SAVED_ITEMS);
+  favorites = normalizeItems(loadJson(DATA_FILES.favorites, []), MAX_SAVED_ITEMS);
+  tabs = normalizeItems(loadJson(DATA_FILES.tabs, []), MAX_SAVED_ITEMS);
+}
+
+function saveSettings() {
+  saveJson(DATA_FILES.settings, settings);
+}
+
+function saveHistory() {
+  saveJson(DATA_FILES.history, historyItems);
+}
+
+function saveFavorites() {
+  saveJson(DATA_FILES.favorites, favorites);
+}
+
+function saveTabs() {
+  saveJson(DATA_FILES.tabs, tabs);
+}
+
+function createId() {
+  if (global.crypto && typeof global.crypto.randomUUID === 'function') {
+    return global.crypto.randomUUID();
+  }
+
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function getEffectiveOpacity() {
+  return settings.opacity;
+}
+
+function sendStatePatch(patch) {
+  if (win && !win.isDestroyed()) {
+    win.webContents.send('app-state-updated', patch);
+  }
+}
+
+function applyOpacity() {
+  if (win && !win.isDestroyed()) {
+    win.setOpacity(getEffectiveOpacity());
+  }
+}
+
+function getNativeWindowHandleValue() {
+  if (!win || win.isDestroyed()) {
+    return null;
+  }
+
+  const handle = win.getNativeWindowHandle();
+  if (!Buffer.isBuffer(handle) || handle.length < 4) {
+    return null;
+  }
+
+  if (handle.length >= 8) {
+    return handle.readBigUInt64LE(0).toString();
+  }
+
+  return BigInt(handle.readUInt32LE(0)).toString();
+}
+
+function applyNativeClickThrough(enabled) {
+  if (process.platform !== 'win32') {
+    return;
+  }
+
+  const hwnd = getNativeWindowHandleValue();
+  if (!hwnd) {
+    return;
+  }
+
+  const script = `
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+
+public static class AmiyaClickThrough {
+  private const int GWL_EXSTYLE = -20;
+  private const long WS_EX_TRANSPARENT = 0x00000020L;
+  private const long WS_EX_LAYERED = 0x00080000L;
+
+  public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+  [DllImport("user32.dll", EntryPoint="GetWindowLongPtrW", SetLastError=true)]
+  private static extern IntPtr GetWindowLongPtr(IntPtr hWnd, int nIndex);
+
+  [DllImport("user32.dll", EntryPoint="SetWindowLongPtrW", SetLastError=true)]
+  private static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+
+  [DllImport("user32.dll", SetLastError=true)]
+  private static extern bool EnumChildWindows(IntPtr hWndParent, EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+  private static void ApplyOne(IntPtr hWnd, bool enabled) {
+    long style = GetWindowLongPtr(hWnd, GWL_EXSTYLE).ToInt64();
+    if (enabled) {
+      style = style | WS_EX_LAYERED | WS_EX_TRANSPARENT;
+    } else {
+      style = style & ~WS_EX_TRANSPARENT;
+    }
+    SetWindowLongPtr(hWnd, GWL_EXSTYLE, new IntPtr(style));
+  }
+
+  public static void Apply(long handle, bool enabled) {
+    IntPtr hWnd = new IntPtr(handle);
+    ApplyOne(hWnd, enabled);
+    EnumChildWindows(hWnd, delegate(IntPtr child, IntPtr lParam) {
+      ApplyOne(child, enabled);
+      return true;
+    }, IntPtr.Zero);
+  }
+}
+"@
+[AmiyaClickThrough]::Apply([Int64]"${hwnd}", $${enabled ? 'true' : 'false'})
+`;
+
+  const encoded = Buffer.from(script, 'utf16le').toString('base64');
+  execFile(
+    'powershell.exe',
+    ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded],
+    { windowsHide: true },
+    () => {}
+  );
+}
+
+function queueNativeClickThrough(enabled) {
+  if (nativeClickThroughTimer) {
+    clearTimeout(nativeClickThroughTimer);
+  }
+
+  applyNativeClickThrough(enabled);
+  nativeClickThroughTimer = setTimeout(() => applyNativeClickThrough(enabled), 250);
+}
+
+function setOpacity(nextOpacity, persist = true) {
+  settings.opacity = clamp(Number(nextOpacity), 0.3, 1, DEFAULT_SETTINGS.opacity);
+  applyOpacity();
+
+  if (persist) {
+    saveSettings();
+  }
+
+  sendStatePatch({ settings });
+}
+
+function adjustOpacity(delta) {
+  setOpacity(settings.opacity + delta);
+}
+
+function setClickThrough(nextValue) {
+  isClickThrough = Boolean(nextValue);
+
+  if (!win || win.isDestroyed()) {
+    return;
+  }
+
+  win.setFocusable(!isClickThrough);
+  win.setIgnoreMouseEvents(isClickThrough);
+  queueNativeClickThrough(isClickThrough);
+  if (isClickThrough) {
+    win.blur();
+  } else {
+    win.focus();
+  }
+  applyOpacity();
+  win.webContents.send('toggle-ui', !isClickThrough);
+  sendStatePatch({ isClickThrough });
+}
+
+function setAlwaysOnTop(nextValue) {
+  isAlwaysOnTop = Boolean(nextValue);
+
+  if (!win || win.isDestroyed()) {
+    return;
+  }
+
+  win.setAlwaysOnTop(isAlwaysOnTop, 'screen-saver');
+  sendStatePatch({ isAlwaysOnTop });
+}
+
+function configureWebSession() {
+  const webSession = session.fromPartition(WEBVIEW_PARTITION);
+  const preloadPath = path.join(__dirname, 'webview-preload.js');
+
+  try {
+    webSession.setPreloads([preloadPath]);
+  } catch (_error) {
+    // The webview element also sets the preload path from the renderer.
+  }
+
+  webSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+    callback(!['display-capture', 'geolocation', 'media', 'midi', 'midiSysex', 'notifications', 'openExternal', 'window-management'].includes(permission));
+  });
+
+  webSession.setPermissionCheckHandler((_webContents, permission) => (
+    !['display-capture', 'geolocation', 'media', 'midi', 'midiSysex', 'notifications', 'openExternal', 'window-management'].includes(permission)
+  ));
+
+  webSession.webRequest.onBeforeRequest((details, callback) => {
+    const url = String(details.url || '').toLowerCase();
+    const shouldBlock = (
+      (details.resourceType === 'script' || details.resourceType === 'xhr' || details.resourceType === 'fetch' || details.resourceType === 'websocket') &&
+      (url.includes('/p2p/') || url.includes('p2p.') || url.includes('-p2p') || url.includes('webrtc') || url.includes('/stun') || url.includes('/turn'))
+    );
+
+    callback({ cancel: shouldBlock });
+  });
+}
+
+function getAppState() {
+  return {
+    settings,
+    history: historyItems,
+    favorites,
+    tabs,
+    isClickThrough,
+    isAlwaysOnTop,
+    userDataPath: app.getPath('userData'),
+    webviewPartition: WEBVIEW_PARTITION
+  };
+}
+
+function runShortcutAction(action) {
+  if (!win || win.isDestroyed()) {
+    return;
+  }
+
+  if (action === 'window.toggleAlwaysOnTop') {
+    setAlwaysOnTop(!isAlwaysOnTop);
+  } else if (action === 'window.toggleClickThrough') {
+    setClickThrough(!isClickThrough);
+  } else if (action === 'appearance.opacityDown') {
+    adjustOpacity(-0.05);
+  } else if (action === 'appearance.opacityUp') {
+    adjustOpacity(0.05);
+  } else {
+    win.webContents.send('run-action', action);
+  }
+}
+
+function registerShortcuts() {
+  globalShortcut.unregisterAll();
+
+  const registered = new Set();
+
+  try {
+    const ok = globalShortcut.register('F8', () => setClickThrough(!isClickThrough));
+    if (ok) {
+      registered.add('f8');
+    }
+  } catch (_error) {
+    // F8 should remain the stable emergency toggle when available.
+  }
+
+  settings.toolbar.forEach((button) => {
+    const shortcut = String(button.shortcut || '').trim();
+    if (button.deleted || !shortcut || registered.has(shortcut.toLowerCase())) {
+      return;
+    }
+
+    try {
+      const ok = globalShortcut.register(shortcut, () => runShortcutAction(button.action));
+      if (ok) {
+        registered.add(shortcut.toLowerCase());
+      }
+    } catch (_error) {
+      // Invalid accelerators are reported in the settings UI and skipped here.
+    }
+  });
+}
+
+function createWindow() {
+  win = new BrowserWindow({
+    width: 960,
+    height: 620,
+    minWidth: 800,
+    minHeight: 420,
+    icon: path.join(__dirname, 'icon.ico'),
+    transparent: true,
+    frame: false,
+    alwaysOnTop: true,
+    backgroundColor: '#00000000',
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false,
+      webviewTag: true,
+      partition: WEBVIEW_PARTITION,
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    }
+  });
+
+  setAlwaysOnTop(true);
+  win.loadFile('index.html');
+  applyOpacity();
+
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+
+  win.webContents.on('did-attach-webview', (_event, guestContents) => {
+    guestContents.setWindowOpenHandler(({ url }) => {
+      if (url && url !== 'about:blank') {
+        win.webContents.send('open-url-in-webview', url);
+      }
+
+      return { action: 'deny' };
+    });
+  });
+
+  win.webContents.on('did-finish-load', () => {
+    sendStatePatch(getAppState());
+  });
+
+  registerShortcuts();
+}
+
+app.whenReady().then(() => {
+  loadAllData();
+  configureWebSession();
+  createWindow();
+});
+
+app.on('before-quit', async (event) => {
+  if (quitting) {
+    return;
+  }
+
+  quitting = true;
+  event.preventDefault();
+
+  try {
+    const persistentSession = session.fromPartition(WEBVIEW_PARTITION);
+    await Promise.allSettled([
+      persistentSession.flushStorageData(),
+      persistentSession.cookies.flushStore()
+    ]);
+  } finally {
+    app.quit();
+  }
+});
+
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll();
+});
+
+ipcMain.handle('get-app-state', () => getAppState());
+
+ipcMain.handle('window-control', (_event, command) => {
+  if (!win || win.isDestroyed()) {
+    return false;
+  }
+
+  if (command === 'minimize') {
+    win.minimize();
+  } else if (command === 'maximize') {
+    if (win.isMaximized()) {
+      win.unmaximize();
+    } else {
+      win.maximize();
+    }
+  } else if (command === 'close') {
+    win.close();
+  }
+
+  return true;
+});
+
+ipcMain.handle('toggle-always-on-top', () => {
+  setAlwaysOnTop(!isAlwaysOnTop);
+  return isAlwaysOnTop;
+});
+
+ipcMain.handle('toggle-click-through', () => {
+  setClickThrough(!isClickThrough);
+  return isClickThrough;
+});
+
+ipcMain.handle('set-opacity', (_event, value) => {
+  setOpacity(value);
+  return settings.opacity;
+});
+
+ipcMain.handle('update-settings', (_event, patch) => {
+  const nextSettings = {
+    ...settings,
+    ...(patch && typeof patch === 'object' ? patch : {})
+  };
+  settings = normalizeSettings(nextSettings);
+  saveSettings();
+  registerShortcuts();
+  applyOpacity();
+  sendStatePatch({ settings });
+  return settings;
+});
+
+ipcMain.handle('reset-settings', () => {
+  settings = normalizeSettings(DEFAULT_SETTINGS);
+  saveSettings();
+  registerShortcuts();
+  applyOpacity();
+  sendStatePatch({ settings });
+  return settings;
+});
+
+ipcMain.handle('record-history', (_event, payload) => {
+  const url = String(payload && payload.url ? payload.url : '').trim();
+  if (!url || url === 'about:blank') {
+    return historyItems;
+  }
+
+  const now = new Date().toISOString();
+  const title = String((payload && payload.title) || url).slice(0, 160);
+  const newest = historyItems[0];
+
+  if (newest && newest.url === url) {
+    newest.title = title;
+    newest.visitedAt = now;
+    newest.updatedAt = now;
+  } else {
+    historyItems = historyItems.filter((item) => item.url !== url);
+    historyItems.unshift({
+      id: createId(),
+      title,
+      url,
+      visitedAt: now,
+      createdAt: now,
+      updatedAt: now
+    });
+  }
+
+  historyItems = historyItems.slice(0, MAX_SAVED_ITEMS);
+  settings.lastUrl = url;
+  saveHistory();
+  saveSettings();
+  sendStatePatch({ history: historyItems, settings });
+  return historyItems;
+});
+
+ipcMain.handle('save-tabs', (_event, nextTabs) => {
+  tabs = normalizeItems(nextTabs, MAX_SAVED_ITEMS);
+  saveTabs();
+  sendStatePatch({ tabs });
+  return tabs;
+});
+
+ipcMain.handle('remove-tab', (_event, id) => {
+  tabs = tabs.filter((item) => item.id !== id && item.url !== id);
+  saveTabs();
+  sendStatePatch({ tabs });
+  return tabs;
+});
+
+ipcMain.handle('remove-history', (_event, id) => {
+  historyItems = historyItems.filter((item) => item.id !== id && item.url !== id);
+  saveHistory();
+  sendStatePatch({ history: historyItems });
+  return historyItems;
+});
+
+ipcMain.handle('add-favorite', (_event, payload) => {
+  const url = String(payload && payload.url ? payload.url : '').trim();
+  if (!url || url === 'about:blank') {
+    return favorites;
+  }
+
+  const now = new Date().toISOString();
+  const title = String((payload && payload.title) || url).slice(0, 160);
+  const existing = favorites.find((item) => item.url === url);
+
+  if (existing) {
+    existing.title = title;
+    existing.updatedAt = now;
+  } else {
+    favorites.unshift({
+      id: createId(),
+      title,
+      url,
+      createdAt: now,
+      updatedAt: now,
+      visitedAt: now
+    });
+  }
+
+  favorites = favorites.slice(0, MAX_SAVED_ITEMS);
+  saveFavorites();
+  sendStatePatch({ favorites });
+  return favorites;
+});
+
+ipcMain.handle('remove-favorite', (_event, id) => {
+  favorites = favorites.filter((item) => item.id !== id && item.url !== id);
+  saveFavorites();
+  sendStatePatch({ favorites });
+  return favorites;
+});
+
+ipcMain.handle('clear-current-site-data', async (_event, origin) => {
+  const parsedOrigin = String(origin || '').trim();
+  if (!parsedOrigin) {
+    return false;
+  }
+
+  const persistentSession = session.fromPartition(WEBVIEW_PARTITION);
+  await persistentSession.clearStorageData({
+    origin: parsedOrigin,
+    storages: ['cookies', 'filesystem', 'indexdb', 'localstorage', 'shadercache', 'websql', 'serviceworkers', 'cachestorage']
+  });
+  await persistentSession.cookies.flushStore();
+  return true;
+});
+
+ipcMain.handle('clear-all-web-data', async () => {
+  const persistentSession = session.fromPartition(WEBVIEW_PARTITION);
+  await persistentSession.clearStorageData();
+  await persistentSession.clearCache();
+  await persistentSession.cookies.flushStore();
+  return true;
+});
+
+ipcMain.handle('open-user-data-folder', async () => {
+  return shell.openPath(app.getPath('userData'));
+});

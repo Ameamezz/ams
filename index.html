@@ -1,0 +1,1917 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' data:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: http:; frame-src https: http: about:;">
+  <title>AmiyaPlayer</title>
+  <style>
+    :root {
+      --accent: #00a1d6;
+      --surface: rgba(21, 24, 28, 0.94);
+      --surface-soft: rgba(31, 35, 41, 0.9);
+      --line: rgba(255, 255, 255, 0.12);
+      --text: #f4f7fb;
+      --muted: #aab4c3;
+      --sidebar-width: 240px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: transparent;
+      color: var(--text);
+      font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
+      font-size: 13px;
+      letter-spacing: 0;
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    button {
+      -webkit-app-region: no-drag;
+      border: 0;
+      color: var(--text);
+      cursor: pointer;
+    }
+
+    #app {
+      display: grid;
+      grid-template-rows: 48px minmax(0, 1fr);
+      width: 100vw;
+      height: 100vh;
+      background: rgba(6, 8, 10, 0.16);
+    }
+
+    #app.clean-mode {
+      grid-template-rows: 0 minmax(0, 1fr);
+    }
+
+    #app.clean-mode #top-bar,
+    #app.click-through #top-bar {
+      display: none;
+    }
+
+    #app.click-through {
+      grid-template-rows: 0 minmax(0, 1fr);
+    }
+
+    #top-bar {
+      display: grid;
+      grid-template-columns: auto minmax(230px, 1fr) auto auto;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      padding: 6px 8px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--line);
+      -webkit-app-region: drag;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .brand-mark {
+      display: grid;
+      place-items: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      background: var(--accent);
+      color: #061015;
+      font-weight: 800;
+    }
+
+    .brand-title {
+      width: 88px;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      font-weight: 700;
+    }
+
+    .address-wrap {
+      display: grid;
+      grid-template-columns: minmax(120px, 1fr) 60px;
+      gap: 6px;
+      min-width: 0;
+      -webkit-app-region: no-drag;
+    }
+
+    #url-input {
+      width: 100%;
+      min-width: 0;
+      height: 32px;
+      padding: 0 10px;
+      color: #111820;
+      background: rgba(255, 255, 255, 0.96);
+      border: 1px solid rgba(255, 255, 255, 0.7);
+      border-radius: 6px;
+      outline: none;
+    }
+
+    #go-btn {
+      height: 32px;
+      border-radius: 6px;
+      background: var(--accent);
+      color: #041016;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    #toolbar {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      min-width: 0;
+      overflow: hidden;
+      -webkit-app-region: no-drag;
+    }
+
+    .icon-btn,
+    .window-btn {
+      display: grid;
+      place-items: center;
+      width: 32px;
+      height: 32px;
+      flex: 0 0 32px;
+      padding: 0;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--text);
+      font-size: 15px;
+      line-height: 1;
+    }
+
+    #min-btn {
+      font-size: 20px;
+      padding-bottom: 3px;
+    }
+
+    .icon-btn:hover,
+    .window-btn:hover {
+      background: rgba(255, 255, 255, 0.12);
+    }
+
+    .icon-btn.active {
+      background: var(--accent);
+      color: #041016;
+      font-weight: 800;
+    }
+
+    .window-controls {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      -webkit-app-region: no-drag;
+    }
+
+    .window-btn.close:hover {
+      background: #d63b3b;
+    }
+
+    #main-shell {
+      display: grid;
+      grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+      min-height: 0;
+      transition: grid-template-columns 120ms ease;
+    }
+
+    #app.sidebar-collapsed #main-shell,
+    #app.playback-mode #main-shell,
+    #app.click-through #main-shell {
+      grid-template-columns: 0 minmax(0, 1fr);
+    }
+
+    #sidebar {
+      width: 100%;
+      min-width: 0;
+      overflow: hidden;
+      background: rgba(18, 21, 26, 0.92);
+      border-right: 1px solid var(--line);
+    }
+
+    #app.sidebar-collapsed #sidebar,
+    #app.playback-mode #sidebar,
+    #app.click-through #sidebar {
+      border-right: 0;
+    }
+
+    .sidebar-inner {
+      display: grid;
+      grid-template-rows: auto auto minmax(0, 1fr);
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      height: 100%;
+      padding: 8px 10px 8px 8px;
+      gap: 8px;
+      overflow: hidden;
+    }
+
+    .sidebar-actions {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 6px;
+    }
+
+    .mini-btn {
+      min-height: 28px;
+      padding: 0 8px;
+      border-radius: 6px;
+      background: var(--surface-soft);
+      border: 1px solid var(--line);
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .mini-btn:hover {
+      border-color: var(--accent);
+    }
+
+    #sidebar-search {
+      width: 100%;
+      height: 30px;
+      padding: 0 9px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      outline: none;
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .section-tabs {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 4px;
+      min-width: 0;
+    }
+
+    .section-tab {
+      height: 28px;
+      min-width: 0;
+      padding: 0 4px;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--muted);
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+
+    .section-tab.active {
+      background: var(--accent);
+      color: #041016;
+      font-weight: 700;
+    }
+
+    #sidebar-list {
+      min-height: 0;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding-right: 8px;
+      margin-right: -4px;
+      scrollbar-gutter: stable;
+    }
+
+    .link-item {
+      position: relative;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 20px;
+      align-items: start;
+      gap: 4px;
+      width: 100%;
+      min-width: 0;
+      padding: 7px 4px 7px 5px;
+      border-radius: 6px;
+      border: 1px solid transparent;
+      color: var(--text);
+      overflow: hidden;
+    }
+
+    .link-item:hover {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: var(--line);
+    }
+
+    .link-main {
+      min-width: 0;
+      max-width: 100%;
+      overflow: hidden;
+      cursor: pointer;
+    }
+
+    .link-title,
+    .link-url {
+      display: block;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+
+    .link-title {
+      font-weight: 700;
+    }
+
+    .link-url {
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .link-remove {
+      width: 18px;
+      height: 22px;
+      min-width: 18px;
+      padding: 0;
+      border-radius: 5px;
+      background: transparent;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1;
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      transition: opacity 120ms ease, background 120ms ease, color 120ms ease;
+    }
+
+    .link-item:hover .link-remove,
+    .link-remove:focus-visible {
+      opacity: 1;
+      visibility: visible;
+      pointer-events: auto;
+    }
+
+    .link-remove:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: var(--text);
+    }
+
+    .empty-state {
+      padding: 18px 6px;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    #content {
+      position: relative;
+      min-width: 0;
+      min-height: 0;
+      background: rgba(0, 0, 0, 0.1);
+    }
+
+    #video-frame {
+      width: 100%;
+      height: 100%;
+      background: transparent;
+    }
+
+    #status-strip {
+      position: absolute;
+      left: 12px;
+      right: 12px;
+      bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 28px;
+      padding: 5px 8px;
+      border-radius: 6px;
+      background: rgba(12, 15, 18, 0.78);
+      border: 1px solid var(--line);
+      color: var(--muted);
+      pointer-events: none;
+      opacity: 0;
+      transform: translateY(6px);
+      transition: opacity 120ms ease, transform 120ms ease;
+    }
+
+    #status-strip.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+    }
+
+    .status-dot.error {
+      background: #ff6464;
+    }
+
+    #settings-drawer {
+      position: fixed;
+      top: 48px;
+      right: 0;
+      bottom: 0;
+      width: min(420px, 100vw);
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      background: rgba(23, 27, 33, 0.97);
+      border-left: 1px solid var(--line);
+      box-shadow: -18px 0 32px rgba(0, 0, 0, 0.26);
+      transform: translateX(100%);
+      transition: transform 140ms ease;
+      z-index: 1000;
+    }
+
+    #settings-drawer.open {
+      transform: translateX(0);
+    }
+
+    #app.clean-mode #settings-drawer {
+      top: 0;
+    }
+
+    .drawer-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 46px;
+      padding: 0 12px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .drawer-title {
+      font-size: 14px;
+      font-weight: 800;
+    }
+
+    .drawer-body {
+      min-height: 0;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 14px;
+    }
+
+    .settings-section {
+      margin-bottom: 18px;
+    }
+
+    .settings-section h2 {
+      margin: 0 0 9px;
+      font-size: 12px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0;
+    }
+
+    .field {
+      display: grid;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+
+    .field label,
+    .check-row {
+      color: var(--text);
+    }
+
+    .field input[type="text"],
+    .field input[type="color"],
+    .field input[type="range"],
+    .field input[type="number"] {
+      width: 100%;
+      min-width: 0;
+    }
+
+    .field input[type="text"],
+    .field input[type="number"] {
+      height: 30px;
+      padding: 0 8px;
+      border-radius: 6px;
+      border: 1px solid var(--line);
+      outline: none;
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .check-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 9px;
+    }
+
+    .toolbar-editor {
+      display: grid;
+      gap: 6px;
+    }
+
+    .toolbar-row {
+      display: grid;
+      grid-template-columns: 22px minmax(0, 1fr) minmax(0, 86px) 30px 30px 42px;
+      align-items: center;
+      gap: 6px;
+      min-height: 34px;
+      width: 100%;
+    }
+
+    .toolbar-row > * {
+      min-width: 0;
+    }
+
+    .toolbar-row input[type="text"] {
+      min-width: 0;
+      height: 30px;
+      padding: 0 8px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .toolbar-row .mini-btn {
+      width: 100%;
+      min-height: 30px;
+      padding: 0;
+    }
+
+    .message {
+      min-height: 20px;
+      color: #ffd36e;
+    }
+
+    @media (max-width: 860px) {
+      #top-bar {
+        grid-template-columns: auto minmax(190px, 1fr) auto;
+      }
+
+      .brand-title {
+        display: none;
+      }
+
+      #toolbar {
+        max-width: 228px;
+      }
+
+      .window-controls {
+        grid-column: 3;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <header id="top-bar">
+      <div class="brand">
+        <div class="brand-mark">A</div>
+        <div class="brand-title">AmiyaPlayer</div>
+      </div>
+
+      <div class="address-wrap">
+        <input id="url-input" type="text" placeholder="输入网址或粘贴 B 站链接">
+        <button id="go-btn" title="打开当前地址">打开</button>
+      </div>
+
+      <nav id="toolbar" aria-label="工具栏"></nav>
+
+      <div class="window-controls">
+        <button class="window-btn" id="min-btn" title="最小化">−</button>
+        <button class="window-btn" id="max-btn" title="最大化/还原">□</button>
+        <button class="window-btn close" id="close-btn" title="关闭">×</button>
+      </div>
+    </header>
+
+    <main id="main-shell">
+      <aside id="sidebar">
+        <div class="sidebar-inner">
+          <div class="sidebar-actions">
+            <button class="mini-btn" id="new-tab-btn">新建</button>
+            <button class="mini-btn" id="save-tab-btn">保存页</button>
+          </div>
+          <input id="sidebar-search" type="search" placeholder="搜索历史和收藏">
+          <div class="section-tabs">
+            <button class="section-tab active" data-section="tabs">标签</button>
+            <button class="section-tab" data-section="history">历史</button>
+            <button class="section-tab" data-section="favorites">收藏</button>
+          </div>
+          <div id="sidebar-list"></div>
+        </div>
+      </aside>
+
+      <section id="content">
+        <webview
+          id="video-frame"
+          src="about:blank"
+          partition="persist:amiyaplayer"
+          webpreferences="contextIsolation=yes,nodeIntegration=no,sandbox=yes">
+        </webview>
+        <div id="status-strip">
+          <span class="status-dot"></span>
+          <span id="status-text">Ready</span>
+        </div>
+      </section>
+    </main>
+
+    <section id="settings-drawer" aria-label="设置">
+      <div class="drawer-head">
+        <div class="drawer-title">设置</div>
+        <button class="icon-btn" id="settings-close-btn" title="关闭设置">×</button>
+      </div>
+      <div class="drawer-body">
+        <div class="settings-section">
+          <h2>外观</h2>
+          <div class="field">
+            <label for="opacity-slider">透明度 <span id="opacity-value">90%</span></label>
+            <input id="opacity-slider" type="range" min="30" max="100" value="90" step="1">
+          </div>
+          <div class="field">
+            <label for="theme-color">主题色</label>
+            <input id="theme-color" type="color" value="#00a1d6">
+          </div>
+          <div class="field">
+            <label for="sidebar-width">侧栏宽度</label>
+            <input id="sidebar-width" type="number" min="220" max="360" step="10">
+          </div>
+          <label class="check-row">
+            <input id="topbar-playback" type="checkbox">
+            播放模式显示顶栏
+          </label>
+        </div>
+
+        <div class="settings-section">
+          <h2>启动</h2>
+          <label class="check-row">
+            <input id="restore-last-tabs" type="checkbox">
+            启动时恢复标签列表
+          </label>
+          <label class="check-row">
+            <input id="open-last-url" type="checkbox">
+            启动时打开上次网址
+          </label>
+          <div class="field">
+            <label for="home-url">主页</label>
+            <input id="home-url" type="text" placeholder="https://www.bilibili.com">
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <h2>工具栏</h2>
+          <div id="toolbar-editor" class="toolbar-editor"></div>
+          <div id="shortcut-message" class="message"></div>
+          <button class="mini-btn" id="reset-toolbar-btn">恢复默认工具栏</button>
+        </div>
+
+        <div class="settings-section">
+          <h2>网页数据</h2>
+          <button class="mini-btn" id="clear-site-btn">清除当前站点数据</button>
+          <button class="mini-btn" id="clear-all-btn">清除全部网页数据</button>
+          <button class="mini-btn" id="open-data-btn">打开用户数据目录</button>
+        </div>
+
+        <div class="settings-section">
+          <button class="mini-btn" id="reset-settings-btn">重置全部设置</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const { ipcRenderer } = require('electron');
+    const { pathToFileURL } = require('url');
+    const path = require('path');
+
+    const appEl = document.getElementById('app');
+    const input = document.getElementById('url-input');
+    const goBtn = document.getElementById('go-btn');
+    const toolbarEl = document.getElementById('toolbar');
+    const webview = document.getElementById('video-frame');
+    const statusStrip = document.getElementById('status-strip');
+    const statusText = document.getElementById('status-text');
+    const statusDot = document.querySelector('.status-dot');
+    const sidebarList = document.getElementById('sidebar-list');
+    const sidebarSearch = document.getElementById('sidebar-search');
+    const settingsDrawer = document.getElementById('settings-drawer');
+    const opacitySlider = document.getElementById('opacity-slider');
+    const opacityValue = document.getElementById('opacity-value');
+    const themeColor = document.getElementById('theme-color');
+    const sidebarWidth = document.getElementById('sidebar-width');
+    const topbarPlayback = document.getElementById('topbar-playback');
+    const restoreLastTabs = document.getElementById('restore-last-tabs');
+    const openLastUrl = document.getElementById('open-last-url');
+    const homeUrl = document.getElementById('home-url');
+    const toolbarEditor = document.getElementById('toolbar-editor');
+    const shortcutMessage = document.getElementById('shortcut-message');
+
+    webview.setAttribute('preload', pathToFileURL(path.join(__dirname, 'webview-preload.js')).toString());
+
+    const LAYOUT_FOCUS = 'focus';
+    const LAYOUT_SELECT = 'select';
+    const DEFAULT_HOME = 'https://www.bilibili.com';
+    const BILIBILI_RULE = {
+      id: 'bilibili',
+      match: [
+        'https://www.bilibili.com/video/*',
+        'https://www.bilibili.com/list/*',
+        'https://www.bilibili.com/bangumi/play/*'
+      ],
+      modes: {}
+    };
+
+    let state = {
+      settings: {},
+      history: [],
+      favorites: [],
+      tabs: [],
+      isAlwaysOnTop: true,
+      isClickThrough: false
+    };
+    let currentSection = 'tabs';
+    let currentUrl = 'about:blank';
+    let currentTitle = '空白页';
+    let insertedCssKey = null;
+    let webviewReady = false;
+    let sidebarCollapsed = false;
+    let cleanMode = false;
+    let playbackMode = false;
+    let statusTimer = null;
+
+    BILIBILI_RULE.modes.focus = `
+      .bili-header, .right-container, .left-container-under-player,
+      .video-info-container, .up-info-container, .bpx-player-sending-area,
+      .ad-report, .pop-live-small-mode, .video-toolbar-container,
+      .international-header, .bili-header-m, .nav-header,
+      .media-info, .media-tool-bar, .media-tab-module,
+      .plp-r, .player-bottom, .bangumi-options, .comment-wrapper {
+        display: none !important;
+      }
+
+      body, html, #app, .bili-app {
+        background: transparent !important;
+        background-color: transparent !important;
+        overflow: hidden !important;
+      }
+
+      .left-container {
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        width: 100vw !important;
+        height: 100vh !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        z-index: 9999 !important;
+      }
+
+      .player-wrap,
+      .player-module,
+      .media-player,
+      #player_module,
+      #bilibili-player,
+      .bpx-player-container,
+      .bpx-player-primary-area,
+      .bpx-player-video-wrap {
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        width: 100vw !important;
+        height: 100vh !important;
+        max-width: none !important;
+        max-height: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        z-index: 9999 !important;
+      }
+
+      .bpx-player-control-bottom {
+        width: 100% !important;
+      }
+
+      [data-amiyaplayer-playlist="true"] {
+        display: none !important;
+      }
+
+      [data-amiyaplayer-player="true"] {
+        position: fixed !important;
+        inset: 0 !important;
+        width: 100vw !important;
+        height: 100vh !important;
+        max-width: none !important;
+        max-height: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        z-index: 9999 !important;
+      }
+
+      [data-amiyaplayer-player="true"] .bpx-player-video-area,
+      [data-amiyaplayer-player="true"] .bpx-player-video-perch,
+      [data-amiyaplayer-player="true"] .bpx-player-video-panel,
+      [data-amiyaplayer-player="true"] .bpx-player-video-wrap,
+      [data-amiyaplayer-player="true"] .bpx-player-video-inner,
+      [data-amiyaplayer-player="true"] .bpx-player-video,
+      [data-amiyaplayer-player="true"] .bwp-video,
+      [data-amiyaplayer-player="true"] bwp-video {
+        position: absolute !important;
+        inset: 0 !important;
+        width: 100% !important;
+        height: 100% !important;
+        max-width: none !important;
+        max-height: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        transform: none !important;
+      }
+
+      [data-amiyaplayer-video="true"],
+      [data-amiyaplayer-player="true"] video {
+        position: absolute !important;
+        inset: 0 !important;
+        width: 100% !important;
+        height: 100% !important;
+        max-width: none !important;
+        max-height: none !important;
+        margin: 0 !important;
+        object-fit: contain !important;
+        transform: none !important;
+      }
+    `;
+
+    BILIBILI_RULE.modes.select = `
+      :root {
+        --amiyaplayer-playlist-width: min(360px, 42vw);
+      }
+
+      .bili-header, .left-container-under-player,
+      .video-info-container, .up-info-container,
+      .bpx-player-sending-area, .ad-report,
+      .international-header, .bili-header-m, .nav-header,
+      .media-info, .media-tool-bar, .media-tab-module,
+      .player-bottom, .bangumi-options, .comment-wrapper {
+        display: none !important;
+      }
+
+      body, html, #app, .bili-app {
+        background: transparent !important;
+        background-color: transparent !important;
+        overflow: hidden !important;
+      }
+
+      .left-container {
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        width: calc(100vw - var(--amiyaplayer-playlist-width)) !important;
+        height: 100vh !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        z-index: 9998 !important;
+      }
+
+      .right-container {
+        position: fixed !important;
+        top: 0 !important;
+        right: 0 !important;
+        width: var(--amiyaplayer-playlist-width) !important;
+        height: 100vh !important;
+        margin: 0 !important;
+        padding: 6px !important;
+        box-sizing: border-box !important;
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
+        background: rgba(16, 16, 16, 0.48) !important;
+        backdrop-filter: blur(6px);
+        z-index: 9999 !important;
+      }
+
+      .player-wrap,
+      .player-module,
+      .media-player,
+      #player_module,
+      #bilibili-player,
+      .bpx-player-container,
+      .bpx-player-primary-area,
+      .bpx-player-video-wrap {
+        width: 100% !important;
+        height: 100vh !important;
+        max-width: none !important;
+        max-height: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+
+      [data-amiyaplayer-player="true"] {
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        width: calc(100vw - var(--amiyaplayer-playlist-width)) !important;
+        height: 100vh !important;
+        max-width: none !important;
+        max-height: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        z-index: 9998 !important;
+      }
+
+      [data-amiyaplayer-player="true"] .bpx-player-video-area,
+      [data-amiyaplayer-player="true"] .bpx-player-video-perch,
+      [data-amiyaplayer-player="true"] .bpx-player-video-panel,
+      [data-amiyaplayer-player="true"] .bpx-player-video-wrap,
+      [data-amiyaplayer-player="true"] .bpx-player-video-inner,
+      [data-amiyaplayer-player="true"] .bpx-player-video,
+      [data-amiyaplayer-player="true"] .bwp-video,
+      [data-amiyaplayer-player="true"] bwp-video {
+        position: absolute !important;
+        inset: 0 !important;
+        width: 100% !important;
+        height: 100% !important;
+        max-width: none !important;
+        max-height: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        transform: none !important;
+      }
+
+      [data-amiyaplayer-video="true"],
+      [data-amiyaplayer-player="true"] video {
+        position: absolute !important;
+        inset: 0 !important;
+        width: 100% !important;
+        height: 100% !important;
+        max-width: none !important;
+        max-height: none !important;
+        margin: 0 !important;
+        object-fit: contain !important;
+        transform: none !important;
+      }
+
+      [data-amiyaplayer-playlist="true"] {
+        position: fixed !important;
+        top: 0 !important;
+        right: 0 !important;
+        display: block !important;
+        visibility: visible !important;
+        width: var(--amiyaplayer-playlist-width) !important;
+        height: 100vh !important;
+        max-width: var(--amiyaplayer-playlist-width) !important;
+        max-height: 100vh !important;
+        margin: 0 !important;
+        padding: 6px !important;
+        box-sizing: border-box !important;
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
+        background: rgba(16, 16, 16, 0.54) !important;
+        backdrop-filter: blur(6px);
+        z-index: 9999 !important;
+      }
+    `;
+
+    const BILIBILI_LAYOUT_HELPER = `
+      (() => {
+        const layoutMode = __AMIYA_MODE__;
+        const playerMark = 'data-amiyaplayer-player';
+        const playlistMark = 'data-amiyaplayer-playlist';
+        const videoMark = 'data-amiyaplayer-video';
+        const styledMark = 'data-amiyaplayer-styled';
+        const styledProps = [
+          'position', 'inset', 'top', 'right', 'bottom', 'left',
+          'width', 'height', 'max-width', 'max-height',
+          'margin', 'padding', 'z-index', 'display', 'visibility',
+          'overflow-x', 'overflow-y', 'box-sizing', 'background',
+          'object-fit', 'transform'
+        ];
+
+        document.querySelectorAll('[' + styledMark + ']').forEach((node) => {
+          styledProps.forEach((prop) => node.style.removeProperty(prop));
+          node.removeAttribute(styledMark);
+        });
+
+        document.querySelectorAll('[' + playerMark + '], [' + playlistMark + '], [' + videoMark + ']').forEach((node) => {
+          node.removeAttribute(playerMark);
+          node.removeAttribute(playlistMark);
+          node.removeAttribute(videoMark);
+        });
+
+        const isVisible = (node) => {
+          if (!node || !node.getBoundingClientRect) {
+            return false;
+          }
+          const rect = node.getBoundingClientRect();
+          const style = window.getComputedStyle(node);
+          return rect.width > 80 && rect.height > 80 && style.display !== 'none' && style.visibility !== 'hidden';
+        };
+
+        const setImportant = (node, styles) => {
+          if (!node || !node.style) {
+            return;
+          }
+          node.setAttribute(styledMark, 'true');
+          Object.keys(styles).forEach((prop) => node.style.setProperty(prop, styles[prop], 'important'));
+        };
+
+        const video = document.querySelector('video, bwp-video');
+        const playerSelectors = [
+          '.bpx-player-container',
+          '.bpx-player-primary-area',
+          '.bpx-player-video-area',
+          '.bpx-player-video-perch',
+          '.bpx-player-video-panel',
+          '.bpx-player-video-wrap',
+          '.bpx-player-video-inner',
+          '#bilibili-player',
+          '#player_module',
+          '.player-wrap',
+          '.player-module',
+          '.media-player'
+        ];
+        const player = [
+          video && video.closest(playerSelectors.join(',')),
+          ...Array.from(document.querySelectorAll(playerSelectors.join(',')))
+        ].filter(Boolean).find(isVisible) || video;
+
+        const playlistSelectors = [
+          '.right-container',
+          '.base-video-sections',
+          '.video-sections-content',
+          '.video-sections-content-list',
+          '.video-pod',
+          '.video-pod__body',
+          '.multi-page',
+          '.cur-list',
+          '.episode-list',
+          '[class*="video-sections"]',
+          '[class*="video-pod"]',
+          '[class*="multi-page"]',
+          '[class*="playlist"]',
+          '[class*="episode"]'
+        ].join(',');
+
+        const playlist = layoutMode === 'select' ? Array.from(document.querySelectorAll(playlistSelectors))
+          .filter((node) => node !== player && !node.contains(video) && !(player && player.contains(node)) && isVisible(node))
+          .map((node) => {
+            const rect = node.getBoundingClientRect();
+            const className = String(node.className || '').toLowerCase();
+            const classScore = /(right-container|video-sections|video-pod|multi-page|playlist|episode)/.test(className) ? 500 : 0;
+            const linkScore = Math.min(node.querySelectorAll('a,li,[role="button"],.item').length, 30) * 12;
+            const positionScore = rect.left > window.innerWidth * 0.45 ? 160 : 0;
+            const areaScore = Math.min(rect.width * rect.height / 1000, 180);
+            return { node, score: classScore + linkScore + positionScore + areaScore };
+          })
+          .sort((a, b) => b.score - a.score)[0]?.node : null;
+
+        const playlistWidth = layoutMode === 'select' && playlist ? 'min(360px, 42vw)' : '0px';
+        const playerWidth = layoutMode === 'select' && playlist ? 'calc(100vw - min(360px, 42vw))' : '100vw';
+        document.documentElement.style.setProperty('--amiyaplayer-playlist-width', playlistWidth);
+
+        if (player) {
+          player.setAttribute(playerMark, 'true');
+          setImportant(player, {
+            position: 'fixed',
+            top: '0',
+            left: '0',
+            width: playerWidth,
+            height: '100vh',
+            'max-width': 'none',
+            'max-height': 'none',
+            margin: '0',
+            padding: '0',
+            'z-index': '9998',
+            transform: 'none'
+          });
+        }
+
+        if (player && player.querySelectorAll) {
+          player.querySelectorAll([
+            '.bpx-player-video-area',
+            '.bpx-player-video-perch',
+            '.bpx-player-video-panel',
+            '.bpx-player-video-wrap',
+            '.bpx-player-video-inner',
+            '.bpx-player-video',
+            '.bwp-video',
+            'bwp-video'
+          ].join(',')).forEach((node) => {
+            setImportant(node, {
+              position: 'absolute',
+              inset: '0',
+              width: '100%',
+              height: '100%',
+              'max-width': 'none',
+              'max-height': 'none',
+              margin: '0',
+              padding: '0',
+              transform: 'none'
+            });
+          });
+        }
+
+        if (video) {
+          video.setAttribute(videoMark, 'true');
+          setImportant(video, {
+            position: player && player !== video ? 'absolute' : 'fixed',
+            inset: player && player !== video ? '0' : '',
+            top: '0',
+            left: '0',
+            width: player && player !== video ? '100%' : playerWidth,
+            height: player && player !== video ? '100%' : '100vh',
+            'max-width': 'none',
+            'max-height': 'none',
+            margin: '0',
+            'object-fit': 'contain',
+            transform: 'none',
+            'z-index': player && player !== video ? 'auto' : '9998'
+          });
+        }
+
+        if (playlist) {
+          playlist.setAttribute(playlistMark, 'true');
+          setImportant(playlist, {
+            position: 'fixed',
+            top: '0',
+            right: '0',
+            display: 'block',
+            visibility: 'visible',
+            width: playlistWidth,
+            height: '100vh',
+            'max-width': playlistWidth,
+            'max-height': '100vh',
+            margin: '0',
+            padding: '6px',
+            'box-sizing': 'border-box',
+            'overflow-y': 'auto',
+            'overflow-x': 'hidden',
+            background: 'rgba(16, 16, 16, 0.54)',
+            'z-index': '9999'
+          });
+        }
+
+        return {
+          hasPlayer: Boolean(video || player),
+          hasPlaylist: Boolean(playlist)
+        };
+      })();
+    `;
+
+    function normalizeUrl(rawUrl) {
+      let url = String(rawUrl || '').trim();
+      if (!url) {
+        return '';
+      }
+
+      if (url === 'about:blank') {
+        return url;
+      }
+
+      if (!/^https?:\/\//i.test(url)) {
+        url = 'https://' + url;
+      }
+
+      return url;
+    }
+
+    function escapeHtml(value) {
+      return String(value || '').replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+      }[char]));
+    }
+
+    function showStatus(message, type = 'info', sticky = false) {
+      clearTimeout(statusTimer);
+      statusText.textContent = message;
+      statusDot.classList.toggle('error', type === 'error');
+      statusStrip.classList.add('visible');
+
+      if (!sticky) {
+        statusTimer = setTimeout(() => {
+          statusStrip.classList.remove('visible');
+        }, 2600);
+      }
+    }
+
+    function applyVisualSettings() {
+      const settings = state.settings || {};
+      document.documentElement.style.setProperty('--accent', settings.themeColor || '#00a1d6');
+      document.documentElement.style.setProperty('--sidebar-width', `${settings.sidebarWidth || 240}px`);
+      updateOpacityUI(settings.opacity || 0.9);
+      themeColor.value = settings.themeColor || '#00a1d6';
+      sidebarWidth.value = settings.sidebarWidth || 240;
+      topbarPlayback.checked = settings.showTopBarInPlayback !== false;
+      restoreLastTabs.checked = settings.restoreLastTabs !== false;
+      openLastUrl.checked = settings.openLastUrl !== false;
+      homeUrl.value = settings.homeUrl || DEFAULT_HOME;
+    }
+
+    function updateOpacityUI(opacity) {
+      const safeOpacity = Math.max(0.3, Math.min(1, Number(opacity) || 0.9));
+      const percent = Math.round(safeOpacity * 100);
+      opacitySlider.value = String(percent);
+      opacityValue.textContent = `${percent}%`;
+    }
+
+    function updateChromeState() {
+      appEl.classList.toggle('sidebar-collapsed', sidebarCollapsed);
+      appEl.classList.toggle('clean-mode', cleanMode);
+      appEl.classList.toggle('playback-mode', playbackMode);
+      appEl.classList.toggle('click-through', state.isClickThrough);
+
+      if (playbackMode && state.settings.showTopBarInPlayback === false) {
+        appEl.classList.add('clean-mode');
+      } else if (!cleanMode) {
+        appEl.classList.remove('clean-mode');
+      }
+
+      renderToolbar();
+    }
+
+    function sortedToolbar() {
+      return [...(state.settings.toolbar || [])].sort((a, b) => Number(a.order) - Number(b.order));
+    }
+
+    function renderToolbar() {
+      toolbarEl.innerHTML = '';
+
+      sortedToolbar().filter((button) => button.visible && !button.deleted).forEach((button) => {
+        const el = document.createElement('button');
+        el.className = 'icon-btn';
+        el.dataset.action = button.action;
+        el.title = `${button.label}${button.shortcut ? ` (${button.shortcut})` : ''}`;
+        el.textContent = button.icon || button.label.slice(0, 1);
+        el.classList.toggle('active', isActionActive(button.action));
+        el.addEventListener('click', () => runAction(button.action));
+        toolbarEl.appendChild(el);
+      });
+    }
+
+    function renderToolbarEditor() {
+      toolbarEditor.innerHTML = '';
+      const toolbar = sortedToolbar().filter((button) => !button.deleted);
+
+      toolbar.forEach((button, index) => {
+        const row = document.createElement('div');
+        row.className = 'toolbar-row';
+        row.innerHTML = `
+          <input type="checkbox" ${button.visible ? 'checked' : ''} title="显示">
+          <input type="text" value="${escapeHtml(button.label)}" title="按钮名称">
+          <input type="text" value="${escapeHtml(button.shortcut || '')}" placeholder="快捷键" title="快捷键，例如 F9 或 Ctrl+Alt+P">
+          <button class="mini-btn" title="上移">↑</button>
+          <button class="mini-btn" title="下移">↓</button>
+          <button class="mini-btn" title="删除">删</button>
+        `;
+
+        const [visibleInput, labelInput, shortcutInput, upButton, downButton, deleteButton] = row.children;
+        visibleInput.addEventListener('change', () => updateToolbarButton(button.id, { visible: visibleInput.checked }));
+        labelInput.addEventListener('change', () => updateToolbarButton(button.id, { label: labelInput.value.trim() || button.label }));
+        shortcutInput.addEventListener('change', () => updateToolbarButton(button.id, { shortcut: shortcutInput.value.trim() }));
+        upButton.disabled = index === 0;
+        downButton.disabled = index === toolbar.length - 1;
+        upButton.addEventListener('click', () => moveToolbarButton(button.id, -1));
+        downButton.addEventListener('click', () => moveToolbarButton(button.id, 1));
+        deleteButton.addEventListener('click', () => updateToolbarButton(button.id, { deleted: true, visible: false }));
+        toolbarEditor.appendChild(row);
+      });
+
+      validateToolbarShortcuts();
+    }
+
+    function validateToolbarShortcuts() {
+      const seen = new Map();
+      const conflicts = [];
+      sortedToolbar().filter((button) => !button.deleted).forEach((button) => {
+        const shortcut = String(button.shortcut || '').trim().toLowerCase();
+        if (!shortcut) {
+          return;
+        }
+        if (seen.has(shortcut)) {
+          conflicts.push(`${button.shortcut}: ${seen.get(shortcut)} / ${button.label}`);
+        } else {
+          seen.set(shortcut, button.label);
+        }
+      });
+
+      shortcutMessage.textContent = conflicts.length
+        ? `快捷键冲突: ${conflicts.join(', ')}`
+        : '快捷键示例: F9, Ctrl+Alt+P；留空表示不绑定。';
+    }
+
+    async function updateSettings(patch) {
+      state.settings = await ipcRenderer.invoke('update-settings', patch);
+      applyVisualSettings();
+      renderToolbar();
+      renderToolbarEditor();
+    }
+
+    function updateToolbarButton(id, patch) {
+      const toolbar = sortedToolbar().map((button) => button.id === id ? { ...button, ...patch } : button);
+      updateSettings({ toolbar });
+    }
+
+    function moveToolbarButton(id, direction) {
+      const currentToolbar = sortedToolbar();
+      const activeToolbar = currentToolbar.filter((button) => !button.deleted);
+      const deletedToolbar = currentToolbar.filter((button) => button.deleted);
+      const index = activeToolbar.findIndex((button) => button.id === id);
+      const nextIndex = index + direction;
+
+      if (index < 0 || nextIndex < 0 || nextIndex >= activeToolbar.length) {
+        return;
+      }
+
+      const [item] = activeToolbar.splice(index, 1);
+      activeToolbar.splice(nextIndex, 0, item);
+      activeToolbar.forEach((button, nextOrder) => {
+        button.order = (nextOrder + 1) * 10;
+      });
+      updateSettings({ toolbar: [...activeToolbar, ...deletedToolbar] });
+    }
+
+    function isActionActive(action) {
+      if (action === 'window.toggleAlwaysOnTop') {
+        return state.isAlwaysOnTop;
+      }
+      if (action === 'window.toggleClickThrough') {
+        return state.isClickThrough;
+      }
+      if (action === 'ui.toggleSidebar') {
+        return !sidebarCollapsed && !playbackMode;
+      }
+      if (action === 'ui.toggleCleanMode') {
+        return cleanMode;
+      }
+      if (action === 'ui.togglePlaybackMode') {
+        return playbackMode;
+      }
+      if (action === 'bilibili.toggleMode') {
+        return state.settings.layoutMode === LAYOUT_SELECT;
+      }
+      if (action === 'data.favoriteCurrent') {
+        return state.favorites.some((item) => item.url === currentUrl);
+      }
+      return false;
+    }
+
+    function renderSidebar() {
+      if (currentSection === 'recent') {
+        currentSection = 'history';
+      }
+
+      document.querySelectorAll('.section-tab').forEach((tab) => {
+        tab.classList.toggle('active', tab.dataset.section === currentSection);
+      });
+
+      const query = sidebarSearch.value.trim().toLowerCase();
+      const items = getSectionItems(currentSection).filter((item) => {
+        if (!query) {
+          return true;
+        }
+        return `${item.title} ${item.url}`.toLowerCase().includes(query);
+      }).slice(0, 10);
+
+      sidebarList.innerHTML = '';
+
+      if (!items.length) {
+        sidebarList.innerHTML = '<div class="empty-state">暂无内容</div>';
+        return;
+      }
+
+      items.forEach((item) => {
+        const row = document.createElement('div');
+        row.className = 'link-item';
+        row.innerHTML = `
+          <div class="link-main" title="${escapeHtml(item.url)}">
+            <span class="link-title">${escapeHtml(item.title || item.url)}</span>
+            <span class="link-url">${escapeHtml(item.url)}</span>
+          </div>
+          <button class="link-remove" title="删除">×</button>
+        `;
+
+        row.querySelector('.link-main').addEventListener('click', () => openUrl(item.url));
+
+        const removeButton = row.querySelector('.link-remove');
+        if (removeButton) {
+          removeButton.addEventListener('click', async (event) => {
+            event.stopPropagation();
+            if (currentSection === 'tabs') {
+              state.tabs = await ipcRenderer.invoke('remove-tab', item.id || item.url);
+            } else if (currentSection === 'favorites') {
+              state.favorites = await ipcRenderer.invoke('remove-favorite', item.id || item.url);
+            } else {
+              state.history = await ipcRenderer.invoke('remove-history', item.id || item.url);
+            }
+            renderSidebar();
+            renderToolbar();
+          });
+        }
+
+        sidebarList.appendChild(row);
+      });
+    }
+
+    function getSectionItems(section) {
+      if (section === 'history') {
+        return state.history || [];
+      }
+      if (section === 'favorites') {
+        return state.favorites || [];
+      }
+      return state.tabs || [];
+    }
+
+    function openUrl(url) {
+      const nextUrl = normalizeUrl(url);
+      if (!nextUrl) {
+        return;
+      }
+
+      currentUrl = nextUrl;
+      input.value = nextUrl;
+      webview.src = nextUrl;
+      showStatus('正在加载页面...', 'info', true);
+    }
+
+    function loadFromInput() {
+      openUrl(input.value);
+    }
+
+    async function saveCurrentTab() {
+      if (!currentUrl || currentUrl === 'about:blank') {
+        return;
+      }
+
+      const nextTabs = [
+        {
+          id: currentUrl,
+          title: currentTitle || currentUrl,
+          url: currentUrl,
+          updatedAt: new Date().toISOString()
+        },
+        ...(state.tabs || []).filter((item) => item.url !== currentUrl)
+      ].slice(0, 10);
+
+      state.tabs = await ipcRenderer.invoke('save-tabs', nextTabs);
+      renderSidebar();
+    }
+
+    async function recordVisit() {
+      if (!currentUrl || currentUrl === 'about:blank') {
+        return;
+      }
+
+      state.history = await ipcRenderer.invoke('record-history', {
+        title: currentTitle || currentUrl,
+        url: currentUrl
+      });
+
+      await saveCurrentTab();
+      renderSidebar();
+      renderToolbar();
+    }
+
+    async function favoriteCurrentPage() {
+      if (!currentUrl || currentUrl === 'about:blank') {
+        showStatus('当前页面不能收藏', 'error');
+        return;
+      }
+
+      state.favorites = await ipcRenderer.invoke('add-favorite', {
+        title: currentTitle || currentUrl,
+        url: currentUrl
+      });
+      renderSidebar();
+      renderToolbar();
+      showStatus('已加入收藏');
+    }
+
+    async function clearCurrentSiteData() {
+      try {
+        const origin = new URL(currentUrl).origin;
+        const ok = window.confirm(`清除 ${origin} 的登录和缓存数据？`);
+        if (!ok) {
+          return;
+        }
+        await ipcRenderer.invoke('clear-current-site-data', origin);
+        showStatus('当前站点数据已清除');
+      } catch (_error) {
+        showStatus('当前页面没有可清除的站点数据', 'error');
+      }
+    }
+
+    async function clearAllWebData() {
+      const ok = window.confirm('清除全部网页登录、缓存和站点数据？');
+      if (!ok) {
+        return;
+      }
+      await ipcRenderer.invoke('clear-all-web-data');
+      showStatus('全部网页数据已清除');
+    }
+
+    function toggleLayoutMode() {
+      const nextMode = state.settings.layoutMode === LAYOUT_SELECT ? LAYOUT_FOCUS : LAYOUT_SELECT;
+      updateSettings({ layoutMode: nextMode });
+      applyLayoutMode(nextMode);
+    }
+
+    function currentPageMatchesBilibili() {
+      return /^https:\/\/www\.bilibili\.com\/(video|list|bangumi\/play|medialist\/play|cheese\/play)\//i.test(currentUrl);
+    }
+
+    async function applyLayoutMode(mode = state.settings.layoutMode, attempt = 0) {
+      if (!webviewReady || !currentPageMatchesBilibili()) {
+        return;
+      }
+
+      try {
+        if (insertedCssKey) {
+          await webview.removeInsertedCSS(insertedCssKey);
+        }
+      } catch (_error) {
+        // Page transitions can invalidate the old CSS key.
+      }
+
+      try {
+        insertedCssKey = await webview.insertCSS(BILIBILI_RULE.modes[mode] || BILIBILI_RULE.modes.focus);
+        const layoutState = await webview.executeJavaScript(
+          BILIBILI_LAYOUT_HELPER.replace('__AMIYA_MODE__', JSON.stringify(mode)),
+          true
+        );
+        if (!layoutState.hasPlayer && attempt < 4) {
+          setTimeout(() => applyLayoutMode(mode, attempt + 1), 700);
+        } else if (!layoutState.hasPlayer) {
+          showStatus('B 站页面结构未识别，已保留原页面', 'error');
+        } else if (mode === LAYOUT_SELECT && !layoutState.hasPlaylist) {
+          showStatus('选集模式已应用，但未找到选集列表', 'error');
+        } else {
+          showStatus(mode === LAYOUT_SELECT ? '选集模式已应用' : '纯净模式已应用');
+        }
+      } catch (_error) {
+        insertedCssKey = null;
+        if (attempt < 4) {
+          setTimeout(() => applyLayoutMode(mode, attempt + 1), 700);
+        } else {
+          showStatus('页面样式注入失败，已保留原页面', 'error');
+        }
+      }
+    }
+
+    function installWebviewLinkFallback() {
+      if (!webview.getWebContentsId()) {
+        return;
+      }
+
+      const script = `
+        (() => {
+          if (window.__amiyaplayerLinkFallbackInstalled) {
+            return;
+          }
+
+          window.__amiyaplayerLinkFallbackInstalled = true;
+
+          const normalizeHref = (href) => {
+            try {
+              return new URL(href, window.location.href).href;
+            } catch (_error) {
+              return '';
+            }
+          };
+
+          const openHere = (href) => {
+            const nextHref = normalizeHref(href);
+            if (nextHref) {
+              window.location.assign(nextHref);
+            }
+          };
+
+          const open = window.open;
+          window.open = (href, target, features) => {
+            const nextHref = normalizeHref(href);
+            if (nextHref && nextHref !== 'about:blank') {
+              openHere(nextHref);
+              return null;
+            }
+
+            return open.call(window, href, target, features);
+          };
+
+          const getSearchKeyword = () => {
+            const inputs = Array.from(document.querySelectorAll('input'));
+            const likelyInput = inputs.find((input) => {
+              const text = [
+                input.value,
+                input.placeholder,
+                input.getAttribute('aria-label'),
+                input.name,
+                input.id,
+                input.className
+              ].join(' ');
+
+              return input.value && /search|keyword|搜索|搜|bili/i.test(text);
+            });
+
+            return likelyInput ? likelyInput.value.trim() : '';
+          };
+
+          const openBilibiliSearch = () => {
+            if (!/\\.bilibili\\.com$/i.test(window.location.hostname) && window.location.hostname !== 'bilibili.com') {
+              return false;
+            }
+
+            const keyword = getSearchKeyword();
+            if (!keyword) {
+              return false;
+            }
+
+            openHere('https://search.bilibili.com/all?keyword=' + encodeURIComponent(keyword));
+            return true;
+          };
+
+          document.addEventListener('submit', (event) => {
+            const form = event.target;
+            if (!form || form.tagName !== 'FORM') {
+              return;
+            }
+
+            const action = normalizeHref(form.action || '');
+            if (/search\\.bilibili\\.com|\\/search/i.test(action)) {
+              event.preventDefault();
+              event.stopPropagation();
+              openHere(action);
+              return;
+            }
+
+            if (openBilibiliSearch()) {
+              event.preventDefault();
+              event.stopPropagation();
+            }
+          }, true);
+
+          document.addEventListener('keydown', (event) => {
+            if (event.key !== 'Enter') {
+              return;
+            }
+
+            const target = event.target;
+            if (!target || target.tagName !== 'INPUT') {
+              return;
+            }
+
+            const marker = [
+              target.placeholder,
+              target.getAttribute('aria-label'),
+              target.name,
+              target.id,
+              target.className
+            ].join(' ');
+
+            if (/search|keyword|搜索|搜/i.test(marker) && openBilibiliSearch()) {
+              event.preventDefault();
+              event.stopPropagation();
+            }
+          }, true);
+
+          document.addEventListener('click', (event) => {
+            const searchButton = event.target && event.target.closest
+              ? event.target.closest('[class*="search"], [aria-label*="搜索"], button, svg')
+              : null;
+
+            if (searchButton && /search|搜索|nav-search|v-popover/i.test(String(searchButton.className || '') + ' ' + String(searchButton.getAttribute('aria-label') || ''))) {
+              if (openBilibiliSearch()) {
+                event.preventDefault();
+                event.stopPropagation();
+                return;
+              }
+            }
+          }, true);
+
+          document.addEventListener('click', (event) => {
+            const anchor = event.target && event.target.closest ? event.target.closest('a[href]') : null;
+            if (!anchor) {
+              return;
+            }
+
+            const href = anchor.href;
+            if (!href || href.startsWith('javascript:') || href.startsWith('mailto:')) {
+              return;
+            }
+
+            const shouldOpenHere =
+              anchor.target === '_blank' ||
+              event.ctrlKey ||
+              event.metaKey ||
+              /\\/video\\/|\\/bangumi\\/play\\/|\\/list\\//.test(href);
+
+            if (shouldOpenHere) {
+              event.preventDefault();
+              event.stopPropagation();
+              openHere(href);
+            }
+          }, true);
+        })();
+      `;
+
+      webview.executeJavaScript(script, true).catch(() => {
+        // Some pages can reject injected helpers during early navigation.
+      });
+    }
+
+    function openUrlFromWebview(url) {
+      const nextUrl = normalizeUrl(url);
+      if (!nextUrl) {
+        return;
+      }
+
+      if (webview.getURL && webview.getURL() !== nextUrl) {
+        openUrl(nextUrl);
+      } else {
+        openUrl(nextUrl);
+      }
+    }
+
+    function controlVideo(command) {
+      const scriptByCommand = {
+        'video.togglePlay': `var v = document.querySelector('video') || document.querySelector('bwp-video'); if (v) { v.paused ? v.play() : v.pause(); true; } else { false; }`,
+        'video.rewind': `var v = document.querySelector('video') || document.querySelector('bwp-video'); if (v) { v.currentTime = Math.max(0, v.currentTime - 5); true; } else { false; }`,
+        'video.forward': `var v = document.querySelector('video') || document.querySelector('bwp-video'); if (v) { v.currentTime += 5; true; } else { false; }`
+      };
+
+      const code = scriptByCommand[command];
+      if (!code || !webview.getWebContentsId()) {
+        return;
+      }
+
+      webview.executeJavaScript(code).then((ok) => {
+        if (!ok) {
+          showStatus('当前页面未找到可控制的视频', 'error');
+        }
+      }).catch(() => showStatus('视频控制失败', 'error'));
+    }
+
+    async function runAction(action) {
+      if (action === 'nav.back') {
+        if (webview.canGoBack()) webview.goBack();
+      } else if (action === 'nav.forward') {
+        if (webview.canGoForward()) webview.goForward();
+      } else if (action === 'nav.refresh') {
+        webview.reload();
+      } else if (action === 'nav.home') {
+        openUrl(state.settings.homeUrl || DEFAULT_HOME);
+      } else if (action === 'ui.toggleSidebar') {
+        sidebarCollapsed = !sidebarCollapsed;
+        updateChromeState();
+      } else if (action === 'data.favoriteCurrent') {
+        await favoriteCurrentPage();
+      } else if (action === 'window.toggleAlwaysOnTop') {
+        state.isAlwaysOnTop = await ipcRenderer.invoke('toggle-always-on-top');
+        updateChromeState();
+      } else if (action === 'window.toggleClickThrough') {
+        state.isClickThrough = await ipcRenderer.invoke('toggle-click-through');
+        updateChromeState();
+      } else if (action === 'ui.toggleCleanMode') {
+        cleanMode = !cleanMode;
+        updateChromeState();
+      } else if (action === 'ui.togglePlaybackMode') {
+        playbackMode = !playbackMode;
+        updateChromeState();
+      } else if (action === 'ui.openSettings') {
+        settingsDrawer.classList.add('open');
+      } else if (action === 'bilibili.toggleMode') {
+        toggleLayoutMode();
+      } else if (action === 'video.togglePlay' || action === 'video.rewind' || action === 'video.forward') {
+        controlVideo(action);
+      } else if (action === 'appearance.opacityDown') {
+        updateSettings({ opacity: Math.max(0.3, (state.settings.opacity || 0.9) - 0.05) });
+      } else if (action === 'appearance.opacityUp') {
+        updateSettings({ opacity: Math.min(1, (state.settings.opacity || 0.9) + 0.05) });
+      }
+    }
+
+    function bindEvents() {
+      goBtn.addEventListener('click', loadFromInput);
+      input.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+          loadFromInput();
+        }
+      });
+
+      document.getElementById('min-btn').addEventListener('click', () => ipcRenderer.invoke('window-control', 'minimize'));
+      document.getElementById('max-btn').addEventListener('click', () => ipcRenderer.invoke('window-control', 'maximize'));
+      document.getElementById('close-btn').addEventListener('click', () => ipcRenderer.invoke('window-control', 'close'));
+      document.getElementById('settings-close-btn').addEventListener('click', () => settingsDrawer.classList.remove('open'));
+      document.getElementById('new-tab-btn').addEventListener('click', () => openUrl('about:blank'));
+      document.getElementById('save-tab-btn').addEventListener('click', saveCurrentTab);
+      document.getElementById('clear-site-btn').addEventListener('click', clearCurrentSiteData);
+      document.getElementById('clear-all-btn').addEventListener('click', clearAllWebData);
+      document.getElementById('open-data-btn').addEventListener('click', () => ipcRenderer.invoke('open-user-data-folder'));
+      document.getElementById('reset-settings-btn').addEventListener('click', async () => {
+        if (!window.confirm('重置全部设置？收藏和历史不会被删除。')) {
+          return;
+        }
+        state.settings = await ipcRenderer.invoke('reset-settings');
+        applyVisualSettings();
+        renderToolbar();
+        renderToolbarEditor();
+        updateChromeState();
+      });
+      document.getElementById('reset-toolbar-btn').addEventListener('click', () => updateSettings({ toolbar: [] }));
+
+      opacitySlider.addEventListener('input', async () => {
+        const opacity = Number(opacitySlider.value) / 100;
+        updateOpacityUI(opacity);
+        state.settings.opacity = await ipcRenderer.invoke('set-opacity', opacity);
+      });
+      themeColor.addEventListener('input', () => updateSettings({ themeColor: themeColor.value }));
+      sidebarWidth.addEventListener('change', () => updateSettings({ sidebarWidth: Number(sidebarWidth.value) }));
+      topbarPlayback.addEventListener('change', () => updateSettings({ showTopBarInPlayback: topbarPlayback.checked }));
+      restoreLastTabs.addEventListener('change', () => updateSettings({ restoreLastTabs: restoreLastTabs.checked }));
+      openLastUrl.addEventListener('change', () => updateSettings({ openLastUrl: openLastUrl.checked }));
+      homeUrl.addEventListener('change', () => updateSettings({ homeUrl: normalizeUrl(homeUrl.value) || DEFAULT_HOME }));
+
+      document.querySelectorAll('.section-tab').forEach((tab) => {
+        tab.addEventListener('click', () => {
+          currentSection = tab.dataset.section;
+          renderSidebar();
+        });
+      });
+      sidebarSearch.addEventListener('input', renderSidebar);
+
+      webview.addEventListener('did-start-loading', () => showStatus('正在加载页面...', 'info', true));
+      webview.addEventListener('did-stop-loading', () => {
+        showStatus('页面加载完成');
+        renderToolbar();
+      });
+      webview.addEventListener('did-fail-load', (event) => {
+        if (event.errorCode !== -3) {
+          showStatus(`加载失败: ${event.errorDescription}`, 'error', true);
+        }
+      });
+      webview.addEventListener('did-navigate', (event) => handleNavigation(event.url));
+      webview.addEventListener('did-navigate-in-page', (event) => handleNavigation(event.url));
+      webview.addEventListener('page-title-updated', (event) => {
+        currentTitle = event.title || currentUrl;
+        recordVisit();
+      });
+      webview.addEventListener('dom-ready', () => {
+        webviewReady = true;
+        insertedCssKey = null;
+        installWebviewLinkFallback();
+        applyLayoutMode();
+      });
+
+      ipcRenderer.on('toggle-ui', (_event, showUI) => {
+        state.isClickThrough = !showUI;
+        updateChromeState();
+      });
+      ipcRenderer.on('run-action', (_event, action) => runAction(action));
+      ipcRenderer.on('open-url-in-webview', (_event, url) => openUrlFromWebview(url));
+      ipcRenderer.on('app-state-updated', (_event, patch) => {
+        state = { ...state, ...patch };
+        applyVisualSettings();
+        renderSidebar();
+        renderToolbar();
+        renderToolbarEditor();
+        updateChromeState();
+      });
+    }
+
+    function handleNavigation(url) {
+      currentUrl = url || webview.src || 'about:blank';
+      input.value = currentUrl === 'about:blank' ? '' : currentUrl;
+      currentTitle = currentUrl;
+      insertedCssKey = null;
+      recordVisit();
+      applyLayoutMode();
+    }
+
+    async function init() {
+      state = await ipcRenderer.invoke('get-app-state');
+      currentUrl = state.settings.lastUrl || 'about:blank';
+      currentTitle = currentUrl;
+      bindEvents();
+      applyVisualSettings();
+      renderSidebar();
+      renderToolbar();
+      renderToolbarEditor();
+      updateChromeState();
+
+      if (state.settings.openLastUrl !== false && state.settings.lastUrl) {
+        openUrl(state.settings.lastUrl);
+      } else {
+        input.value = '';
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>

@@ -1,0 +1,28 @@
+{
+  "name": "BiliBili-Overlay-Player",
+  "version": "1.0.0",
+  "description": "B站半透明鼠标穿透播放器",
+  "main": "main.js",
+  "author": "Ameamezz",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win --x64"
+  },
+  "build": {
+    "appId": "com.ameamezz.biliplayer",
+    "productName": "半透明穿透播放器",
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": [
+        "portable"
+      ],
+      "icon": "icon.ico"
+    }
+  },
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1"
+  }
+}

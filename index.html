@@ -1468,6 +1468,9 @@
       renderSidebar();
     }
 
+    // 历史写入策略：只在 page-title-updated 触发时落盘（带 force=true）。
+    // did-navigate 路径只重置 pendingRecord 不写盘，避免每次导航双写历史 JSON。
+    // 已知取舍：SPA 内页导航且标题不变时不写历史（实际使用中 B 站等主要场景均会更新标题）。
     async function recordVisit(force = false) {
       if (!currentUrl || currentUrl === 'about:blank') {
         return;

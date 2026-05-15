@@ -746,6 +746,10 @@
     let playbackMode = false;
     let statusTimer = null;
 
+    const RECORD_DEDUPE_MS = 500;
+    let pendingRecord = null;
+    let lastRecordedAt = 0;
+
     BILIBILI_RULE.modes.focus = `
       .bili-header, .right-container, .left-container-under-player,
       .video-info-container, .up-info-container, .bpx-player-sending-area,
@@ -1464,10 +1468,18 @@
       renderSidebar();
     }
 
-    async function recordVisit() {
+    async function recordVisit(force = false) {
       if (!currentUrl || currentUrl === 'about:blank') {
         return;
       }
+
+      const now = Date.now();
+      if (!force && now - lastRecordedAt < RECORD_DEDUPE_MS && pendingRecord === currentUrl) {
+        return;
+      }
+
+      pendingRecord = currentUrl;
+      lastRecordedAt = now;
 
       state.history = await ipcRenderer.invoke('record-history', {
         title: currentTitle || currentUrl,
@@ -1859,7 +1871,7 @@
       webview.addEventListener('did-navigate-in-page', (event) => handleNavigation(event.url));
       webview.addEventListener('page-title-updated', (event) => {
         currentTitle = event.title || currentUrl;
-        recordVisit();
+        recordVisit(true);
       });
       webview.addEventListener('dom-ready', () => {
         webviewReady = true;
@@ -1889,7 +1901,7 @@
       input.value = currentUrl === 'about:blank' ? '' : currentUrl;
       currentTitle = currentUrl;
       insertedCssKey = null;
-      recordVisit();
+      pendingRecord = null;
       applyLayoutMode();
     }
 

@@ -1840,10 +1840,20 @@
       });
       document.getElementById('reset-toolbar-btn').addEventListener('click', () => updateSettings({ toolbar: [] }));
 
-      opacitySlider.addEventListener('input', async () => {
+      let opacityDebounceTimer = null;
+      opacitySlider.addEventListener('input', () => {
         const opacity = Number(opacitySlider.value) / 100;
         updateOpacityUI(opacity);
+        clearTimeout(opacityDebounceTimer);
+        opacityDebounceTimer = setTimeout(async () => {
+          state.settings.opacity = await ipcRenderer.invoke('set-opacity', opacity);
+        }, 150);
+      });
+      opacitySlider.addEventListener('change', async () => {
+        clearTimeout(opacityDebounceTimer);
+        const opacity = Number(opacitySlider.value) / 100;
         state.settings.opacity = await ipcRenderer.invoke('set-opacity', opacity);
+        await ipcRenderer.invoke('commit-opacity');
       });
       themeColor.addEventListener('input', () => updateSettings({ themeColor: themeColor.value }));
       sidebarWidth.addEventListener('change', () => updateSettings({ sidebarWidth: Number(sidebarWidth.value) }));

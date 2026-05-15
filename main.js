@@ -323,15 +323,21 @@ function queueNativeClickThrough(enabled) {
   nativeClickThroughTimer = setTimeout(() => applyNativeClickThrough(enabled), 250);
 }
 
-function setOpacity(nextOpacity, persist = true) {
+function applyOpacityValue(nextOpacity) {
   settings.opacity = clamp(Number(nextOpacity), 0.3, 1, DEFAULT_SETTINGS.opacity);
   applyOpacity();
-
-  if (persist) {
-    saveSettings();
-  }
-
   sendStatePatch({ settings });
+}
+
+function persistOpacity() {
+  saveSettings();
+}
+
+function setOpacity(nextOpacity, persist = true) {
+  applyOpacityValue(nextOpacity);
+  if (persist) {
+    persistOpacity();
+  }
 }
 
 function adjustOpacity(delta) {
@@ -588,7 +594,12 @@ ipcMain.handle('toggle-click-through', () => {
 });
 
 ipcMain.handle('set-opacity', (_event, value) => {
-  setOpacity(value);
+  applyOpacityValue(value);
+  return settings.opacity;
+});
+
+ipcMain.handle('commit-opacity', () => {
+  persistOpacity();
   return settings.opacity;
 });
 

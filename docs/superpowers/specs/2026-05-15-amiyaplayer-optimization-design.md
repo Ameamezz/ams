@@ -102,7 +102,7 @@ connect-src 'self';
 
 | ID | 位置 | 问题 | 修法 |
 |---|---|---|---|
-| A1 | `main.js:304` | `$${enabled ? 'true' : 'false'}` 在模板字符串中产出字面 `$$true`/`$$false`，PowerShell 解析为错误，原生穿透实际未生效 | 改为通过 `-EncodedCommand` 传一个 `param([bool]$enabled, [int64]$handle)` 的脚本，bool 与 handle 从 `execFile` 参数列表传入而非字符串插值；同时捕获 stderr 写入 debug 日志（仅在 `process.env.AMIYAPLAYER_DEBUG` 开启时） |
+| ~~A1~~ | `main.js:304` | ~~`$${enabled ? 'true' : 'false'}` 在模板字符串中产出字面 `$$true`/`$$false`~~ | **VOID — 验证为幻觉 bug。** JS 模板字面量 `$${expr}` 实际产出 `$` + `${expr}` 插值结果，即 `$true` / `$false`——正是有效 PowerShell 布尔。原代码工作正常。执行 Task 1 时实测确认（见 commit 3bd6438）。Spec 误判，撤销此条 |
 | A2 | `index.html:1862` 与 `:1892` | `did-navigate` 与 `page-title-updated` 各触发一次 `recordVisit`，每次导航双写历史，且首次写入 title 为 url | 改为：`did-navigate` 仅更新 `currentUrl` + 内存中的 placeholder；`page-title-updated` 之后做实际写入；对相同 URL 做 500ms 内去重 |
 | A3 | `index.html:1828` + `main.js:325` | 透明度滑块 `input` 事件每帧 IPC 且每次 `setOpacity` 都落盘 | renderer 端 debounce 150ms 才发 `set-opacity`；main 端把 `setOpacity` 拆成 `applyOpacity` 与 `persistOpacity`，IPC `set-opacity` 默认只 apply，新增 `commit-opacity` IPC 在 `change` 事件触发时落盘 |
 | A4 | `index.html:1380` + `main.js:13` | `MAX_SAVED_ITEMS = 10` 同时限制了存储与渲染，搜索体验差 | 拆为：`MAX_HISTORY = 200`、`MAX_FAVORITES = 50`、`MAX_TABS = 50`、`SIDEBAR_RENDER_LIMIT = 100`。renderer 渲染时按 limit 截断；搜索时不再 slice 10 |

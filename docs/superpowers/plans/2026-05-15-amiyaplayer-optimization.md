@@ -20,7 +20,10 @@
 
 ## Wave 1 · 修 bug + 工程化
 
-### PR1 / Task 1：A1 修复 PowerShell 鼠标穿透字面 bug
+### PR1 / Task 1：A1 修复 PowerShell 鼠标穿透字面 bug — **VOID（幻觉 bug，已撤销）**
+
+> **执行时发现：** 此任务的前提错误。JS 模板字面量 `$${expr}` 实际产出 `$` + `${expr}`，所以 `$${enabled ? 'true' : 'false'}` 是合法的 `$true` / `$false`——原代码工作正常。同时 PowerShell `-EncodedCommand` 后追加命名参数会报错 "Cannot process command because a command is already specified"，意味着按本任务做出的"修复"反而是真实回归。Task 1 撤销（见 git commit 3bd6438），跳过此任务直接进入 Task 2。Spec 表格中的 A1 行已标 VOID。
+
 
 **Files：**
 - Modify: `main.js`（替换 `applyNativeClickThrough` 函数体，原约第 253–314 行）

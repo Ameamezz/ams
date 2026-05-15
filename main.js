@@ -431,6 +431,7 @@ function runShortcutAction(action) {
 
 function registerShortcuts() {
   const desired = new Map();
+  // F8 是硬编码的紧急穿透开关，优先级高于 toolbar 配置；若用户在 toolbar 中把 F8 绑给其他 action，下方 desired.has(key) 会静默跳过，确保 F8 永远能恢复 UI。
   desired.set('f8', { action: '__builtin.toggleClickThrough', label: 'F8 紧急穿透切换', accelerator: 'F8' });
 
   settings.toolbar.forEach((button) => {

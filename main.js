@@ -8,6 +8,7 @@ const {
   clamp,
   normalizeSettings
 } = require('./lib/normalize-settings');
+const { createId, normalizeItems } = require('./lib/normalize-items');
 
 const WEBVIEW_PARTITION = 'persist:amiyaplayer';
 const DATA_FILES = {
@@ -83,24 +84,6 @@ function saveJson(fileName, data) {
   }
 }
 
-function normalizeItems(items, maxItems) {
-  if (!Array.isArray(items)) {
-    return [];
-  }
-
-  return items
-    .filter((item) => item && typeof item.url === 'string' && item.url.trim())
-    .map((item) => ({
-      id: String(item.id || createId()),
-      title: String(item.title || item.url).slice(0, 160),
-      url: item.url,
-      createdAt: item.createdAt || item.visitedAt || new Date().toISOString(),
-      updatedAt: item.updatedAt || item.visitedAt || new Date().toISOString(),
-      visitedAt: item.visitedAt || item.updatedAt || item.createdAt || new Date().toISOString()
-    }))
-    .slice(0, maxItems);
-}
-
 function loadAllData() {
   settings = normalizeSettings(loadJson(DATA_FILES.settings, DEFAULT_SETTINGS));
   historyItems = normalizeItems(loadJson(DATA_FILES.history, []), MAX_SAVED_ITEMS);
@@ -122,14 +105,6 @@ function saveFavorites() {
 
 function saveTabs() {
   saveJson(DATA_FILES.tabs, tabs);
-}
-
-function createId() {
-  if (global.crypto && typeof global.crypto.randomUUID === 'function') {
-    return global.crypto.randomUUID();
-  }
-
-  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
 function getEffectiveOpacity() {

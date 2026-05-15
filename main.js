@@ -67,20 +67,31 @@ const DEFAULT_SETTINGS = {
   toolbar: DEFAULT_TOOLBAR
 };
 
-const DISABLED_CHROMIUM_FEATURES = [
-  'MediaRouter',
-  'DialMediaRouteProvider',
-  'GlobalMediaControlsCastStartStop',
-  'WebRtcHideLocalIpsWithMdns'
+// Chromium 启动开关清单。每条都注明用途，删除前请确认替代手段。
+const CHROMIUM_DISABLED_FEATURES = [
+  'MediaRouter',                       // 关闭 Chromium 内置投屏发现，避免遮蔽穿透层。
+  'DialMediaRouteProvider',            // 同上，DLNA 设备发现。
+  'GlobalMediaControlsCastStartStop',  // 隐藏全局媒体控制中的投屏按钮。
+  'WebRtcHideLocalIpsWithMdns'         // 配合下方 WebRTC 关闭，避免 mDNS 局部地址泄露。
 ];
 
-app.commandLine.appendSwitch('disable-features', DISABLED_CHROMIUM_FEATURES.join(','));
-app.commandLine.appendSwitch('disable-quic');
-app.commandLine.appendSwitch('disable-webrtc');
-app.commandLine.appendSwitch('disable-background-networking');
-app.commandLine.appendSwitch('disable-domain-reliability');
-app.commandLine.appendSwitch('force-webrtc-ip-handling-policy', 'disable_non_proxied_udp');
-app.commandLine.appendSwitch('webrtc-ip-handling-policy', 'disable_non_proxied_udp');
+const CHROMIUM_SWITCHES = [
+  ['disable-features', CHROMIUM_DISABLED_FEATURES.join(',')],
+  ['disable-quic', null],                                          // 关 QUIC，避免某些 CDN 走 UDP 绕过抓包。
+  ['disable-webrtc', null],                                        // 主要防 P2P/IP 泄露。
+  ['disable-background-networking', null],                          // 关闭 Chromium 后台心跳。
+  ['disable-domain-reliability', null],                             // 关闭 domain reliability 上报。
+  ['force-webrtc-ip-handling-policy', 'disable_non_proxied_udp'],   // 双保险：即使 WebRTC 启用也走代理。
+  ['webrtc-ip-handling-policy', 'disable_non_proxied_udp']
+];
+
+CHROMIUM_SWITCHES.forEach(([key, value]) => {
+  if (value == null) {
+    app.commandLine.appendSwitch(key);
+  } else {
+    app.commandLine.appendSwitch(key, value);
+  }
+});
 
 let win;
 let isClickThrough = false;

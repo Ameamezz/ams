@@ -1,8 +1,8 @@
-# AmiyaPlayer 功能概览与使用手册
+# AemeathTool 功能概览与使用手册
 
 ## 1. 产品定位
 
-AmiyaPlayer 是一个基于 Electron 的轻量浮窗网页/视频播放器，核心场景是把 B 站或其他常用网页放在桌面上方观看、操作或临时查阅。
+AemeathTool 是一个基于 Electron 的轻量浮窗网页/视频播放器，核心场景是把 B 站或其他常用网页放在桌面上方观看、操作或临时查阅。
 
 它目前更接近“紧凑型悬浮浏览器”，不是完整浏览器。重点功能包括：
 
@@ -96,33 +96,30 @@ AmiyaPlayer 是一个基于 Electron 的轻量浮窗网页/视频播放器，核
 在项目目录中执行：
 
 ```powershell
+npm install
 npm run start
 ```
 
-### 3.2 构建便携版
+### 3.2 检查代码质量与测试
 
-执行：
+```powershell
+npm run lint
+npm test
+```
+
+`npm test` 跑 Vitest，覆盖 `lib/` 下的纯函数（settings/items/URL/toolbar 排序）。
+
+### 3.3 构建便携版
 
 ```powershell
 npm run build
 ```
 
-构建产物会输出到：
-
-```text
-dist/
-```
-
-当前项目中已经存在一个便携版构建：
-
-```text
-dist/半透明穿透播放器 1.0.0.exe
-release/AmiyaPlayer-portable-20260514-225833.exe
-```
+构建产物会输出到 `dist/`，文件名形如 `AemeathTool <version>.exe`。`productName` 已配置为 `AemeathTool`，对应 Windows 任务管理器中的显示名称。
 
 ## 4. 快速上手
 
-1. 启动 AmiyaPlayer。
+1. 启动 AemeathTool。
 2. 在顶部地址栏输入网址，例如 `https://www.bilibili.com`。
 3. 点击“打开”或按回车进入页面。
 4. 登录 B 站或其他网站；登录状态会随应用数据保留。
@@ -221,9 +218,23 @@ release/AmiyaPlayer-portable-20260514-225833.exe
 
 ## 9. 当前限制
 
-- 标签、历史、收藏目前各最多保存 10 条。
+- 标签、历史、收藏目前各最多保存 10 条（Wave 3 后会放大到 50 / 200）。
 - 主要针对 B 站做了布局优化，其他视频网站按普通网页方式打开。
 - 不是完整浏览器，没有多标签页实时切换、扩展插件、下载管理等完整浏览器功能。
 - 网页内容运行在 webview 中，某些网站的反自动化或安全策略可能限制播放控制。
-- 项目元数据中部分中文字段存在编码显示异常，不影响主功能使用。
+- 数据存储内部仍使用历史标识符 `persist:amiyaplayer`（Electron session 分区）；重命名为 AemeathTool 后未变，以保留已登录账号。
+
+## 10. 近期改动（Wave 1，2026-05-15）
+
+完成的修复与改进：
+
+- **A2** 历史记录去重：每次导航只写一次 `history.json`，避免脏 title 短暂落盘。
+- **A3** 透明度滑块拖动期间不再每像素落盘，松手后才写。
+- **A6** Content-Security-Policy 收紧：移除对 `<webview>` 无效的 `frame-src`，新增 `connect-src 'self'`。
+- **A7** 全局快捷键改为差异化注册：改设置不再粗暴 `unregisterAll`，F8 应急穿透稳定保留。
+- **B5** Chromium 启动开关全部加注释，集中在一个数组里管理。
+- 工程化：接入 **ESLint 9** + **Vitest 1**，新增 4 个测试文件覆盖 normalize 系列函数（27 个用例全部通过）。
+- 品牌：窗口标题、顶栏品牌名、`productName` 全部更新为 **AemeathTool**；顶栏徽标改用 `icon.ico`。
+
+未完成（后续 Wave 2–4 推进）：架构重构（preload 桥 + 文件拆分）、Electron 28→33、Electron 安全配置收紧、上限放大、应急 UI 锚点、托盘 + Boss Key、命令面板、数据导入导出、CI。详情见 `docs/superpowers/specs/2026-05-15-amiyaplayer-optimization-design.md`。
 

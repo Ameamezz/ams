@@ -1,8 +1,14 @@
-# AmiyaPlayer Upgrade Tasks
+# AemeathTool Upgrade Tasks (历史文档)
+
+> **状态：早期路线图。** 后续的设计与实施计划已迁移到：
+> - `docs/superpowers/specs/2026-05-15-amiyaplayer-optimization-design.md`
+> - `docs/superpowers/plans/2026-05-15-amiyaplayer-optimization.md`
+>
+> 本文件保留作历史参考，描述 Phase 1–6 的最初设想（窗口外壳、侧栏、设置面板、工具栏可定制、播放增强等）。这些 Phase 在 Wave 0（初版）已基本落地。
 
 ## 1. Upgrade Goal
 
-AmiyaPlayer should evolve from a simple Bilibili overlay toolbar into a lightweight floating web player/browser.
+AemeathTool should evolve from a simple Bilibili overlay toolbar into a lightweight floating web player/browser.
 
 The core identity should stay focused:
 

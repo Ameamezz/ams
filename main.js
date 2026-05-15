@@ -261,6 +261,8 @@ function applyNativeClickThrough(enabled) {
   }
 
   const script = `
+param([int64]$Handle, [bool]$Enabled)
+
 Add-Type @"
 using System;
 using System.Runtime.InteropServices;
@@ -301,15 +303,27 @@ public static class AmiyaClickThrough {
   }
 }
 "@
-[AmiyaClickThrough]::Apply([Int64]"${hwnd}", $${enabled ? 'true' : 'false'})
+
+[AmiyaClickThrough]::Apply($Handle, $Enabled)
 `;
 
   const encoded = Buffer.from(script, 'utf16le').toString('base64');
   execFile(
     'powershell.exe',
-    ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded],
+    [
+      '-NoProfile',
+      '-ExecutionPolicy', 'Bypass',
+      '-EncodedCommand', encoded,
+      '-Handle', String(hwnd),
+      '-Enabled', enabled ? '$true' : '$false'
+    ],
     { windowsHide: true },
-    () => {}
+    (error, _stdout, stderr) => {
+      if (process.env.AMIYAPLAYER_DEBUG && (error || stderr)) {
+        // eslint-disable-next-line no-console
+        console.error('[native-click-through]', error || stderr);
+      }
+    }
   );
 }
 

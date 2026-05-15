@@ -91,6 +91,7 @@ let favorites = [];
 let tabs = [];
 let quitting = false;
 let nativeClickThroughTimer = null;
+const registeredShortcuts = new Map();
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -429,32 +430,53 @@ function runShortcutAction(action) {
 }
 
 function registerShortcuts() {
-  globalShortcut.unregisterAll();
-
-  const registered = new Set();
-
-  try {
-    const ok = globalShortcut.register('F8', () => setClickThrough(!isClickThrough));
-    if (ok) {
-      registered.add('f8');
-    }
-  } catch (_error) {
-    // F8 should remain the stable emergency toggle when available.
-  }
+  const desired = new Map();
+  desired.set('f8', { action: '__builtin.toggleClickThrough', label: 'F8 紧急穿透切换', accelerator: 'F8' });
 
   settings.toolbar.forEach((button) => {
     const shortcut = String(button.shortcut || '').trim();
-    if (button.deleted || !shortcut || registered.has(shortcut.toLowerCase())) {
+    if (button.deleted || !shortcut) {
       return;
     }
+    const key = shortcut.toLowerCase();
+    if (desired.has(key)) {
+      return;
+    }
+    desired.set(key, { action: button.action, label: button.label, accelerator: shortcut });
+  });
 
+  const desiredKeys = new Set(desired.keys());
+  const currentKeys = Array.from(registeredShortcuts.keys());
+
+  currentKeys.forEach((key) => {
+    const current = registeredShortcuts.get(key);
+    if (!desiredKeys.has(key) || desired.get(key).action !== current.action) {
+      try {
+        globalShortcut.unregister(current.accelerator);
+      } catch (_error) {
+        // 反注册失败属于无害，直接清表。
+      }
+      registeredShortcuts.delete(key);
+    }
+  });
+
+  desired.forEach((value, key) => {
+    if (registeredShortcuts.has(key)) {
+      return;
+    }
     try {
-      const ok = globalShortcut.register(shortcut, () => runShortcutAction(button.action));
+      const ok = globalShortcut.register(value.accelerator, () => {
+        if (value.action === '__builtin.toggleClickThrough') {
+          setClickThrough(!isClickThrough);
+        } else {
+          runShortcutAction(value.action);
+        }
+      });
       if (ok) {
-        registered.add(shortcut.toLowerCase());
+        registeredShortcuts.set(key, value);
       }
     } catch (_error) {
-      // Invalid accelerators are reported in the settings UI and skipped here.
+      // 非法 accelerator 在设置 UI 已提示，这里静默跳过。
     }
   });
 }
@@ -529,6 +551,7 @@ app.on('before-quit', async (event) => {
 
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
+  registeredShortcuts.clear();
 });
 
 ipcMain.handle('get-app-state', () => getAppState());

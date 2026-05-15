@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: http:; connect-src 'self';">
-  <title>AmiyaPlayer</title>
+  <title>AemeathTool</title>
   <style>
     :root {
       --accent: #00a1d6;
@@ -86,14 +86,13 @@
     }
 
     .brand-mark {
-      display: grid;
-      place-items: center;
       width: 28px;
       height: 28px;
       border-radius: 6px;
-      background: var(--accent);
-      color: #061015;
-      font-weight: 800;
+      object-fit: contain;
+      flex: 0 0 28px;
+      -webkit-user-drag: none;
+      user-select: none;
     }
 
     .brand-title {
@@ -574,8 +573,8 @@
   <div id="app">
     <header id="top-bar">
       <div class="brand">
-        <div class="brand-mark">A</div>
-        <div class="brand-title">AmiyaPlayer</div>
+        <img class="brand-mark" src="icon.ico" alt="" draggable="false">
+        <div class="brand-title">AemeathTool</div>
       </div>
 
       <div class="address-wrap">

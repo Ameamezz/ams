@@ -13,7 +13,7 @@
   },
   "build": {
     "appId": "com.ameamezz.biliplayer",
-    "productName": "半透明穿透播放器",
+    "productName": "AemeathTool",
     "directories": {
       "output": "dist"
     },

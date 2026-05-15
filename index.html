@@ -691,6 +691,7 @@
     const { pathToFileURL } = require('url');
     const path = require('path');
     const { normalizeUrl } = require('./lib/normalize-url');
+    const { reorderToolbar } = require('./lib/toolbar-order');
 
     const appEl = document.getElementById('app');
     const input = document.getElementById('url-input');
@@ -1307,22 +1308,8 @@
     }
 
     function moveToolbarButton(id, direction) {
-      const currentToolbar = sortedToolbar();
-      const activeToolbar = currentToolbar.filter((button) => !button.deleted);
-      const deletedToolbar = currentToolbar.filter((button) => button.deleted);
-      const index = activeToolbar.findIndex((button) => button.id === id);
-      const nextIndex = index + direction;
-
-      if (index < 0 || nextIndex < 0 || nextIndex >= activeToolbar.length) {
-        return;
-      }
-
-      const [item] = activeToolbar.splice(index, 1);
-      activeToolbar.splice(nextIndex, 0, item);
-      activeToolbar.forEach((button, nextOrder) => {
-        button.order = (nextOrder + 1) * 10;
-      });
-      updateSettings({ toolbar: [...activeToolbar, ...deletedToolbar] });
+      const next = reorderToolbar(sortedToolbar(), id, direction);
+      updateSettings({ toolbar: next });
     }
 
     function isActionActive(action) {

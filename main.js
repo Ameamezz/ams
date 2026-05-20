@@ -1,5 +1,4 @@
 const { app, BrowserWindow, globalShortcut, ipcMain, session, shell } = require('electron');
-const { execFile } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const {
@@ -25,7 +24,10 @@ const CHROMIUM_DISABLED_FEATURES = [
   'MediaRouter',                       // 关闭 Chromium 内置投屏发现，避免遮蔽穿透层。
   'DialMediaRouteProvider',            // 同上，DLNA 设备发现。
   'GlobalMediaControlsCastStartStop',  // 隐藏全局媒体控制中的投屏按钮。
-  'WebRtcHideLocalIpsWithMdns'         // 配合下方 WebRTC 关闭，避免 mDNS 局部地址泄露。
+  'WebRtcHideLocalIpsWithMdns',        // 配合下方 WebRTC 关闭，避免 mDNS 局部地址泄露。
+  'CalculateNativeWinOcclusion'        // 透明窗口在 Windows 下经常被 DWM 误判为被遮挡，导致 Chromium
+                                       // 暂停合成（表现为视频帧黑屏、UI 出现旧帧残留 / 重影）。关闭此项
+                                       // 让 Chromium 不再听信遮挡判定，永远全速合成。
 ];
 
 const CHROMIUM_SWITCHES = [
@@ -35,7 +37,16 @@ const CHROMIUM_SWITCHES = [
   ['disable-background-networking', null],                          // 关闭 Chromium 后台心跳。
   ['disable-domain-reliability', null],                             // 关闭 domain reliability 上报。
   ['force-webrtc-ip-handling-policy', 'disable_non_proxied_udp'],   // 双保险：即使 WebRTC 启用也走代理。
-  ['webrtc-ip-handling-policy', 'disable_non_proxied_udp']
+  ['webrtc-ip-handling-policy', 'disable_non_proxied_udp'],
+  ['disable-backgrounding-occluded-windows', null],                 // F8 click-through 后窗口失焦，Chromium
+                                                                     // 默认会把"看起来被遮挡"的窗口降频，导致
+                                                                     // 视频停止刷新（黑屏）。强制不降。
+  ['disable-renderer-backgrounding', null],                         // 同上，对应 renderer 进程层面的降级。
+  ['disable-direct-composition', null]                              // Chromium 默认用 DirectComposition 合成视频到
+                                                                     // layered window，但 click-through (WS_EX_TRANSPARENT)
+                                                                     // 状态下 DComp 不再更新表面 → 视频帧停在最后一帧 → 黑屏。
+                                                                     // 强制走传统 GDI/Skia 合成路径，每次 invalidate 都能真实
+                                                                     // 写入 layered window。代价：失去部分硬件视频加速。
 ];
 
 CHROMIUM_SWITCHES.forEach(([key, value]) => {
@@ -54,8 +65,9 @@ let historyItems = [];
 let favorites = [];
 let tabs = [];
 let quitting = false;
-let nativeClickThroughTimer = null;
+let invalidationPumpTimer = null;
 const registeredShortcuts = new Map();
+const INVALIDATION_PUMP_INTERVAL_MS = 33; // ~30fps，强制 Chromium 在 click-through 下持续重绘视频帧
 
 function getDataPath(fileName) {
   return path.join(app.getPath('userData'), fileName);
@@ -123,95 +135,11 @@ function applyOpacity() {
   }
 }
 
-function getNativeWindowHandleValue() {
-  if (!win || win.isDestroyed()) {
-    return null;
-  }
-
-  const handle = win.getNativeWindowHandle();
-  if (!Buffer.isBuffer(handle) || handle.length < 4) {
-    return null;
-  }
-
-  if (handle.length >= 8) {
-    return handle.readBigUInt64LE(0).toString();
-  }
-
-  return BigInt(handle.readUInt32LE(0)).toString();
-}
-
-function applyNativeClickThrough(enabled) {
-  if (process.platform !== 'win32') {
-    return;
-  }
-
-  const hwnd = getNativeWindowHandleValue();
-  if (!hwnd) {
-    return;
-  }
-
-  const script = `
-Add-Type @"
-using System;
-using System.Runtime.InteropServices;
-
-public static class AmiyaClickThrough {
-  private const int GWL_EXSTYLE = -20;
-  private const long WS_EX_TRANSPARENT = 0x00000020L;
-  private const long WS_EX_LAYERED = 0x00080000L;
-
-  public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
-
-  [DllImport("user32.dll", EntryPoint="GetWindowLongPtrW", SetLastError=true)]
-  private static extern IntPtr GetWindowLongPtr(IntPtr hWnd, int nIndex);
-
-  [DllImport("user32.dll", EntryPoint="SetWindowLongPtrW", SetLastError=true)]
-  private static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
-
-  [DllImport("user32.dll", SetLastError=true)]
-  private static extern bool EnumChildWindows(IntPtr hWndParent, EnumWindowsProc lpEnumFunc, IntPtr lParam);
-
-  private static void ApplyOne(IntPtr hWnd, bool enabled) {
-    long style = GetWindowLongPtr(hWnd, GWL_EXSTYLE).ToInt64();
-    if (enabled) {
-      style = style | WS_EX_LAYERED | WS_EX_TRANSPARENT;
-    } else {
-      style = style & ~WS_EX_TRANSPARENT;
-    }
-    SetWindowLongPtr(hWnd, GWL_EXSTYLE, new IntPtr(style));
-  }
-
-  public static void Apply(long handle, bool enabled) {
-    IntPtr hWnd = new IntPtr(handle);
-    ApplyOne(hWnd, enabled);
-    EnumChildWindows(hWnd, delegate(IntPtr child, IntPtr lParam) {
-      ApplyOne(child, enabled);
-      return true;
-    }, IntPtr.Zero);
-  }
-}
-"@
-[AmiyaClickThrough]::Apply([Int64]"${hwnd}", $${enabled ? 'true' : 'false'})
-`;
-
-  const encoded = Buffer.from(script, 'utf16le').toString('base64');
-  execFile(
-    'powershell.exe',
-    ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded],
-    { windowsHide: true },
-    () => {}
-  );
-}
-
-function queueNativeClickThrough(enabled) {
-  if (nativeClickThroughTimer) {
-    clearTimeout(nativeClickThroughTimer);
-  }
-
-  applyNativeClickThrough(enabled);
-  nativeClickThroughTimer = setTimeout(() => applyNativeClickThrough(enabled), 250);
-}
-
+// 历史决定：之前用 PowerShell + Win32 API 给所有子窗口设 WS_EX_TRANSPARENT / WS_EX_LAYERED 作为
+// click-through 的"双保险"。结果是该兜底比病更糟 —— 子窗口被设 WS_EX_TRANSPARENT 后 Chromium 的视频
+// 帧停止绘制（黑屏）；execFile 启动 powershell.exe 又把 F8 切换变得明显卡顿。Electron 自己的
+// setIgnoreMouseEvents 已经设置顶层 HWND 的 WS_EX_TRANSPARENT，Windows 根本不会把鼠标消息送到这个
+// 窗口，OOPIF 子窗口也就收不到。所以整套 PowerShell shim 已彻底移除。
 function applyOpacityValue(nextOpacity) {
   settings.opacity = clamp(Number(nextOpacity), 0.3, 1, DEFAULT_SETTINGS.opacity);
   applyOpacity();
@@ -233,6 +161,34 @@ function adjustOpacity(delta) {
   setOpacity(settings.opacity + delta);
 }
 
+function startInvalidationPump() {
+  stopInvalidationPump();
+  // click-through 状态下 Windows 不再向窗口投递鼠标/输入消息，Chromium 合成线程缺少 tick 驱动，
+  // 视频帧停在最后一帧（呈现为黑屏）。除了 webContents.invalidate() 触发 Chromium 内部重绘，还要让
+  // Windows 主动 swap layered window 表面 —— 在 base opacity 之上做极小幅 (±0.001) 抖动，每次 setOpacity
+  // 都会调一次 SetLayeredWindowAttributes，强制 DWM 重新合成 layered window。肉眼几乎察觉不到。
+  let toggle = false;
+  invalidationPumpTimer = setInterval(() => {
+    if (!win || win.isDestroyed()) {
+      stopInvalidationPump();
+      return;
+    }
+    win.webContents.invalidate();
+    const baseOpacity = getEffectiveOpacity();
+    // 抖动方向也不能让 opacity > 1，否则 Electron 会忽略。固定向下抖。
+    const jittered = toggle ? Math.max(0.3, baseOpacity - 0.001) : baseOpacity;
+    win.setOpacity(jittered);
+    toggle = !toggle;
+  }, INVALIDATION_PUMP_INTERVAL_MS);
+}
+
+function stopInvalidationPump() {
+  if (invalidationPumpTimer) {
+    clearInterval(invalidationPumpTimer);
+    invalidationPumpTimer = null;
+  }
+}
+
 function setClickThrough(nextValue) {
   isClickThrough = Boolean(nextValue);
 
@@ -240,15 +196,18 @@ function setClickThrough(nextValue) {
     return;
   }
 
-  win.setFocusable(!isClickThrough);
-  win.setIgnoreMouseEvents(isClickThrough);
-  queueNativeClickThrough(isClickThrough);
+  // forward:true 让 mousemove 事件继续转发到 webContents（点击仍然穿透），逼 Chromium 合成线程保持活跃。
+  // 不再调用 setFocusable(false) / blur() —— 窗口仍可获焦，但用户的"不可聚焦"诉求由 click-through 本身
+  // 满足（鼠标穿透，用户点不到窗口；视频操作走 globalShortcut → IPC → webview.executeJavaScript）。
+  win.setIgnoreMouseEvents(isClickThrough, { forward: true });
+  // 阻止 webContents 被认为后台后降频，否则即使开了 disable-renderer-backgrounding 也可能被节流。
+  win.webContents.setBackgroundThrottling(false);
   if (isClickThrough) {
-    win.blur();
+    startInvalidationPump();
   } else {
-    win.focus();
+    stopInvalidationPump();
+    win.webContents.invalidate(); // 恢复时立刻刷一帧，清掉 click-through 期间合成残留的旧像素。
   }
-  applyOpacity();
   win.webContents.send('toggle-ui', !isClickThrough);
   sendStatePatch({ isClickThrough });
 }
@@ -448,6 +407,7 @@ app.on('before-quit', async (event) => {
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
   registeredShortcuts.clear();
+  stopInvalidationPump();
 });
 
 ipcMain.handle('get-app-state', () => getAppState());

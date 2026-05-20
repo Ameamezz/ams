@@ -200,7 +200,9 @@
       width: 100%;
       min-width: 0;
       overflow: hidden;
-      background: rgba(18, 21, 26, 0.92);
+      /* 不透明背景：F8 时 grid 重排会让 webview 视口宽度突变，Chromium 透明窗口在 Windows 下偶发会
+         把旧帧像素留在 sidebar 区域形成重影。给 sidebar 一个 opaque 底色，残留就被遮住，看不见了。 */
+      background: rgb(18, 21, 26);
       border-right: 1px solid var(--line);
     }
 
@@ -212,7 +214,7 @@
 
     .sidebar-inner {
       display: grid;
-      grid-template-rows: auto auto minmax(0, 1fr);
+      grid-template-rows: auto auto auto minmax(0, 1fr);
       width: 100%;
       max-width: 100%;
       min-width: 0;
@@ -1866,6 +1868,9 @@
       ipcRenderer.on('toggle-ui', (_event, showUI) => {
         state.isClickThrough = !showUI;
         updateChromeState();
+        // sidebar 折叠/展开会改变 webview 视口宽度，B 站页面会响应式重排，注入 CSS 的固定宽度会失配，
+        // 选集面板可能被遮挡 / 收起。等 grid 过渡完成后重跑一次布局注入，让选集恢复显示。
+        setTimeout(() => applyLayoutMode(), 180);
       });
       ipcRenderer.on('run-action', (_event, action) => runAction(action));
       ipcRenderer.on('open-url-in-webview', (_event, url) => openUrlFromWebview(url));
